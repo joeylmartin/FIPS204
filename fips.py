@@ -37,6 +37,38 @@ W_MAX_HINT_ONES = 80
     #case _:
 
 
+
+
+def NTT(w):
+    w_hat = np.empty(255)
+    for i in range(255):
+        w_hat[i] = w[i] 
+    
+    k = 0
+    len = 128
+    while len > 1:
+        start = 0
+        while start < 256:
+            k += 1
+            zeta = 
+
+
+
+
+
+
+
+def bitarr_get_byte(bits: bitarray, byte_index: int) -> int:
+    slice0 = bit_ind_conv(byte_index)
+    slice1 = bit_ind_conv(byte_index + 1)
+    if(slice1 > len(bits)):
+        raise ValueError(f"{byte_index} is out of range")
+    
+    return bit_arr_to_int(bits[slice0:slice1])
+
+
+
+
 #USED FOR REJNTTPOLY AND EXPANDA
 COEFFICIENT_ARRAY_SIZE = 256
 
@@ -49,8 +81,20 @@ def coeff_from_three_bytes(b0: int, b1: int, b2: int) -> int:
     else:
         return None
 
+def coeff_from_half_byte(b: int) -> int:
+    '''
+    Generates an element of {−η,−η +1,...,η} ∪ {None}. 
+    '''
+    if N_PRIVATE_KEY_RANGE == 2 and b < 15:
+        return  2 - (b % 5)
+    
+    if N_PRIVATE_KEY_RANGE == 4 and b < 9:
+        return 4 - b
+
+    return None
+
 # USE A DECORATOR TO MANAGE EXTENDED SEED BETWEEN ROUNDS
-def rej_ntt_poly(seed: bitarray):
+def rej_ntt_poly(rho: bitarray):
     #where seed is bitstring of length 272
 
     j = 0
@@ -62,9 +106,9 @@ def rej_ntt_poly(seed: bitarray):
     #However, it is unbounded, and C will keep increasing until we have satifised 256 distinct coefficients.
     #We want to extend the  minimize the amount of times we have to extend the seed.
 
-    extended_seed_length = COEFFICIENT_ARRAY_SIZE * 10 #Minimum is 3 * 256 = 768 bits. * 4 to be safe; CAN OPTIMIZE THIS.
+    extended_seed_length = bit_ind_conv(COEFFICIENT_ARRAY_SIZE) * 3 #Minimum is 3 * 256 * 8= 768 bytes. TODO OPTIMIZE
 
-    extended_seed = h_shake128(seed, extended_seed_length)
+    extended_seed = h_shake128(rho, extended_seed_length)
 
     while j < 256:
 
@@ -72,20 +116,48 @@ def rej_ntt_poly(seed: bitarray):
         if bit_ind_conv(c + 3) > extended_seed_length:
             extended_seed_length += COEFFICIENT_ARRAY_SIZE
             #print(extended_seed_length)
-            extended_seed = h_shake128(seed.tobytes(), extended_seed_length)
+            extended_seed = h_shake128(rho.tobytes(), extended_seed_length)
         
-        byte_0 = extended_seed[bit_ind_conv(c): bit_ind_conv(c+1)]        
-        byte_1 = extended_seed[bit_ind_conv(c+1): bit_ind_conv(c+2)]
-        byte_2 = extended_seed[bit_ind_conv(c+2): bit_ind_conv(c+3)]
+        byte_0 = bitarr_get_byte(extended_seed, c)        
+        byte_1 = bitarr_get_byte(extended_seed, c + 1)             
+        byte_2 = bitarr_get_byte(extended_seed, c + 2)     
 
-        coeff = coeff_from_three_bytes(bit_arr_to_int(byte_0),bit_arr_to_int(byte_1), bit_arr_to_int(byte_2))
+        coeff = coeff_from_three_bytes(byte_0,byte_1, byte_2)
             
         c += 3
 
         if coeff is not None:
             a[j] = coeff
             j += 1
-    print(c)
+
+
+    return a
+
+def rej_bounded_poly(rho: bitarray):
+    '''
+    Samples an element a ∈ Rq with coeffcients in [−η,η] computed via rejection sampling from rho.
+    Rho is a 528 bit string. 
+    '''
+    j = 0
+    c = 0
+    a = np.empty(COEFFICIENT_ARRAY_SIZE)
+
+    extended_seed_length = int(bit_ind_conv(COEFFICIENT_ARRAY_SIZE) * 1.5 )#Minimum is 256 * 8= 2048 bytes. TODO OPTIMIZE
+
+    extended_seed = h_shake128(rho.tobytes(),extended_seed_length)
+
+
+    while j < COEFFICIENT_ARRAY_SIZE:
+        z = bitarr_get_byte(extended_seed, c)
+        z0 = coeff_from_half_byte(z % 16)
+        z1 = coeff_from_half_byte(z // 16)
+        if z0 is not None:
+            a[j] = z0
+            j += 1
+        if z1 is not None and j < COEFFICIENT_ARRAY_SIZE:
+            a[j] = z1
+            j += 1
+        c += 1
 
     return a
 
@@ -118,15 +190,15 @@ def expand_a(rho: bitarray) -> np.ndarray:
     return matrix
 
 
-def expand_s(rho_prime: bitarray) -> Tuple[np.ndarray, np.ndarray]:
+def expand_s(rho: bitarray) -> Tuple[np.ndarray, np.ndarray]:
     '''
     Samples vectors s1 ∈ Rlq and s2 ∈ Rkq, each with coeffcients in the interval [−η,η].
     '''
-    s1, s2 = np.empty(L_MATRIX), np.empty(K_MATRIX)
+    s1, s2 = np.empty((L_MATRIX, COEFFICIENT_ARRAY_SIZE), dtype='int'), np.empty((K_MATRIX, COEFFICIENT_ARRAY_SIZE), dtype='int')
     for r in range(L_MATRIX):
-        s1[r] = 2 #rejbounded poly
+        s1[r] = rej_bounded_poly(rho + integer_to_bits(r, 16))
     for r in range(K_MATRIX):
-        s2[r] = 2
+        s2[r] = rej_bounded_poly(rho + integer_to_bits(r + L_MATRIX, 16))
     return s1, s2
 
 def h_shake256(seed: bytes, bit_length: int) -> bitarray:
@@ -176,6 +248,8 @@ def ml_dsa_key_gen():
     k = extended_seed[768:] #last 256 bits
 
     a = expand_a(rho)
+    s1, s2 = expand_s(rho_prime)
+
     print('g')
 
 
