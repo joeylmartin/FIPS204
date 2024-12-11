@@ -23,4 +23,5 @@ W_MAX_HINT_ONES = 80
     #case _:
 
 #each vector consists of 256 components
+#and so do polynomials. maybe change?
 VECTOR_ARRAY_SIZE = 256 

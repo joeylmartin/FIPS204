@@ -7,6 +7,8 @@ import numpy as np
 from bitarray import bitarray, _set_default_endian
 from parametres import *
 from ntt_arithmetic import *
+from auxiliary_funcs import *
+from hash_funcs import h_shake256, h_shake128
 
 #d swap = DECLARATIVE IMPLEMENTATION OF IMPERATIVE STUFF
 
@@ -17,7 +19,11 @@ _set_default_endian(BYTEORDER)
 bit_ind_conv = lambda bit_index : bit_index * 8
 bit_arr_to_int = lambda bit_array : int(bit_array.to01(), 2)
 
-
+def mod_pm(x, q):
+    r = x % q
+    if r > q // 2:
+        r -= q
+    return r
 
 
 
@@ -30,6 +36,13 @@ def load_zeta_brv_cache(cache_file='zeta_brv_k_cache.pkl'):
 cached_zeta_brv = load_zeta_brv_cache()
 
 
+def power_2_round(r) -> Tuple[int, int]:
+    '''
+    Decomposes r into (r1, r0) such that r ≡ r1 2^d + r0 mod q.
+    '''
+    r_pos = r % Q_MODULUS
+    r_0 = mod_pm(r_pos, np.pow(2, D_DROPPED_BITS))
+    return (r_pos - r_0) / (np.pow(2, D_DROPPED_BITS)), r_0
 
 def NTT(w: np.ndarray) -> np.ndarray:
     w_hat = w.copy() #d swap
@@ -52,20 +65,20 @@ def NTT(w: np.ndarray) -> np.ndarray:
 def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
     w = w_hat.copy() #d swap
     
-    k = 256
+    m = 256
     len = 1
     while len < 256:
         start = 0
         while start < 256:
-            k -= 1
-            zeta = -cached_zeta_brv[k]
+            m -= 1
+            zeta = -cached_zeta_brv[m]
             for j in range(start, start + len):
                 t = w[j]
                 w[j] = (t + w[j + len]) % Q_MODULUS
                 w[j + len] = (t - w[j + len]) % Q_MODULUS
                 w[j+len] = (zeta * w[j+len]) % Q_MODULUS
             start += 2 * len
-        len = 2 * len
+        len *= 2
     f = 8347681
     w = [(f * j) % Q_MODULUS for j in w] #d swap
     return w
@@ -82,31 +95,30 @@ def bitarr_get_byte(bits: bitarray, byte_index: int) -> int:
     return bit_arr_to_int(bits[slice0:slice1])
 
 
-
-
-#USED FOR REJNTTPOLY AND EXPANDA
-
-
-def coeff_from_three_bytes(b0: int, b1: int, b2: int) -> int:
-    if b2 > 127:
-        b2 -= 128
-    z = (65536 * b2) + (256 * b1) + b0
-    if z < Q_MODULUS:
-        return z
-    else:
-        return None
-
-def coeff_from_half_byte(b: int) -> int:
+#ORIGINALLY BYTE ARRAY
+def pkEncode(rho : bitarray, t1 : np.ndarray) -> bitarray:
     '''
-    Generates an element of {−η,−η +1,...,η} ∪ {None}. 
+    Encodes a public key for ML-DSA into a byte string.
+    Where T1 is K polynomials (k x 256 np array)
     '''
-    if N_PRIVATE_KEY_RANGE == 2 and b < 15:
-        return  2 - (b % 5)
+    pk = rho.copy()
+    for i in range(K_MATRIX):
+        pk = pk + simple_bit_pack(t1[i], 10)
+    return pk
+
+def skEncode(rho : bitarray, K : int, tr : bitarray, s1 : np.ndarray, s2 : np.ndarray, t0 : np.ndarray) -> bitarray:
+    sk = rho + integer_to_bits(K) + tr
+    for i in range(L_MATRIX):
+        sk += bit_pack(s1[i], N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE)
     
-    if N_PRIVATE_KEY_RANGE == 4 and b < 9:
-        return 4 - b
-
-    return None
+    for i in range(K_MATRIX):
+        sk += bit_pack(s2[i], N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE)
+    
+    lower_bound = math.pow(2, D_DROPPED_BITS - 1) - 1
+    for i in range(K_MATRIX):
+        sk += bit_pack(t0[i], lower_bound, lower_bound + 1)
+    
+    return sk
 
 # USE A DECORATOR TO MANAGE EXTENDED SEED BETWEEN ROUNDS
 def rej_ntt_poly(rho: bitarray):
@@ -176,21 +188,6 @@ def rej_bounded_poly(rho: bitarray) -> np.ndarray:
 
     return a
 
-def integer_to_bits(x: int, a: int) -> bitarray:
-    '''
-    Computes the base-2 representation of x mod 2a (using in little-endian order). 
-    '''
-
-    #TO DO: MAKE THIS SIMPLER!!!
-
-    y = (x >> np.arange(a)) & 1
-    
-    # Initialize a bitarray and extend it with the computed bits
-    bits = bitarray()
-    bits.extend(y.astype(bool))  # Convert y to bool array, as bitarray works well with bools
-    
-    return bits
-
 
 def expand_a(rho: bitarray) -> np.ndarray:
     '''
@@ -216,36 +213,7 @@ def expand_s(rho: bitarray) -> Tuple[np.ndarray, np.ndarray]:
         s2[r] = rej_bounded_poly(rho + integer_to_bits(r + L_MATRIX, 16))
     return s1, s2
 
-def h_shake256(seed: bytes, bit_length: int) -> bitarray:
-    '''
-    Extend bit string seed with SHAKE-256 XOF
-    '''
-    byte_length = bit_length // 8
 
-    hash_obj = hashlib.shake_256()
-    hash_obj.update(seed)
-    xof_output = hash_obj.digest(byte_length)
-
-    bits = bitarray()
-    #Return bitarray object from bytes
-    bits.frombytes(xof_output)
-    return bits
-
-def h_shake128(seed: bytes, bit_length: int) -> bitarray:
-    '''
-    Extend bit string seed with SHAKE-128 XOF
-    '''
-    byte_length = bit_length // 8
-
-    hash_obj = hashlib.shake_128()
-    hash_obj.update(seed)
-    xof_output = hash_obj.digest(byte_length)
-
-    #Return bitarray object from bytes
-    bits = bitarray()
-    #Return bitarray object from bytes
-    bits.frombytes(xof_output)
-    return bits
 
 def ml_dsa_key_gen_internal(seed: bytes):
 
@@ -257,19 +225,28 @@ def ml_dsa_key_gen_internal(seed: bytes):
     rho_prime = extended_seed[256:768] #middle 512 bits
     k = extended_seed[768:] #last 256 bits
 
+    #Create Matrix A, and vectors s1 (secret) and s2 (error)
     a = expand_a(rho)
     s1, s2 = expand_s(rho_prime)
-    ntt_expanded = [NTT(x) for x in s1]
 
     #product of A and NTT of S1
-    ntt_product = matrix_vector_ntt(a, ntt_expanded)
-
-    ntt_inv_expanded = [NTT_inv(x) for x in ntt_product]
-    t = add_vector_ntt(ntt_inv_expanded, s2)
+    ntt_product = matrix_vector_ntt(a, [NTT(x) for x in s1])
+    t = add_vector_ntt([NTT_inv(x) for x in ntt_product], s2)
 
 
-    #inner = np.matmul(a, ntt_temp)
-    t = NTT_inv(inner) + s2
+    #TODO: double check which uses L_MATRIX!! One of them is wrong, maybe?
+    t0 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE))
+    t1 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE))
+
+    #apply power2round component-wise
+    for i in range(K_MATRIX):
+        for j in range(VECTOR_ARRAY_SIZE):
+            t1[i][j], t0[i][j] = power_2_round(t[i][j])
+
+    pk = pkEncode(rho, t1)
+    tr = h_shake256(pk.tobytes(), 64)
+    sk = skEncode(rho, K_MATRIX, s1, s2, t0)
+    return pk, sk
 
 def ml_dsa_key_gen():
     '''
@@ -277,8 +254,10 @@ def ml_dsa_key_gen():
     '''
     #generate 256 bit seed
     seed = random.getrandbits(256) #change to approved RBG
-    if seed == None:
+
+    if seed == None: #needed?
         return None
+
     temp = seed.to_bytes(32, BYTEORDER)
     return ml_dsa_key_gen_internal(temp)
 
