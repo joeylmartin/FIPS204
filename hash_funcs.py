@@ -1,43 +1,69 @@
 import hashlib
 from bitarray import bitarray
-from hashlib import _hashlib
-from _hashlib import HASH
+from math import ceil
 
-def h() -> HASH:
+
+from Crypto.Hash import SHAKE128, SHAKE256
+from typing import Union
+
+from auxiliary_funcs import new_bitarray
+
+HASH = Union[SHAKE128, SHAKE256]
+
+
+def h_init() -> HASH:
     '''
     Return a SHAKE-256 hash object
     '''
-    return hashlib.shake_256()
+    return SHAKE256.new()
 
-def g() -> HASH:
+def g_init() -> HASH:
     '''
     Return a SHAKE-128 hash object
     '''
-    return hashlib.shake_128()
+    return SHAKE128.new()
 
 def hash_absorb(ctx : HASH, data : bitarray) -> HASH:
     '''
     Injects data to be used in the absorbing phase of XOF and updates context ctx.
     '''
-    ctx.update(data)
+    ctx.update(bytes(data))
     return ctx
+
+
 
 def hash_squeeze(ctx : HASH, bit_length : int) -> tuple[HASH, bitarray]:
     '''
     Extracts bit_length output bits produced during the squeezing phase of XOF
     and updates context ctx
     '''
+
+    '''
+    #Squeeze only works in bytes! Hash ceiling to nearest byte, then return the bits
+    byte_length = ceil(bit_length / 8)
+    byte_output = ctx.digest(byte_length)
+    bits = new_bitarray()
+    bits.frombytes(byte_output) #creates a bitarray from the byte_output
+
+    return ctx, bits[0:bit_length] #return sliced bit array
+    '''
     byte_length = bit_length // 8
-    byte_output = ctx.digest(bit_length)
-    bits = bitarray()
-    bits.frombytes(byte_output)
-    return ctx, bits
+    byte_output = ctx.read(byte_length)
+    bits = new_bitarray()
+    bits.frombytes(byte_output) #creates a bitarray from the byte_output
+
+    return ctx, bits 
+
+
+
+#Note: SHAKE-256 and SHAKE-128 are written using bit_length, but in 
+#the original implementation, they use byte_length.
 
 def h_shake256(seed: bytes, bit_length: int) -> bitarray:
     '''
     Extend bit string seed with SHAKE-256 XOF
     '''
-    hash_obj = h()
+    hash_obj = h_init()
 
     hash_obj = hash_absorb(hash_obj, seed)
     hash_obj, extended_seed_bitarray = hash_squeeze(hash_obj, bit_length)
@@ -48,7 +74,7 @@ def h_shake128(seed: bytes, bit_length: int) -> bitarray:
     '''
     Extend bit string seed with SHAKE-128 XOF
     '''
-    hash_obj = g()
+    hash_obj = g_init()
 
     hash_obj = hash_absorb(hash_obj, seed)
     hash_obj, extended_seed_bitarray = hash_squeeze(hash_obj, bit_length)

@@ -3,7 +3,7 @@ from parametres import *
 
 def add_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     '''
-    Add two NTT polynomials
+    Add two NTT polynomials; returns a scalar
     '''
     c = np.empty(VECTOR_ARRAY_SIZE)
     for i in range(VECTOR_ARRAY_SIZE):
@@ -12,7 +12,7 @@ def add_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 def multiply_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     '''
-    Multiply two NTT polynomials
+    Multiply two NTT polynomials; returns a scalar
     '''
     c = np.empty(VECTOR_ARRAY_SIZE)
     for i in range(VECTOR_ARRAY_SIZE):
@@ -21,16 +21,17 @@ def multiply_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 def add_vector_ntt(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     '''
-    Add two NTT vectors
+    Add two NTT vectors; returns a vector
     '''
     u = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(L_MATRIX):
         u[i] = add_ntt(v[i], w[i])
     return u
 
-def scalar_vector_ntt(c: int, v: np.ndarray) -> np.ndarray:
+def scalar_vector_ntt(c: np.ndarray, v: np.ndarray) -> np.ndarray:
     '''
-    Computes the product c ∘ v of a scalar c and a vector v over Tq.
+    Computes the product c ∘ v of a scalar c and a vector v over Tq. 
+    Returns a vector
     '''
     w = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(L_MATRIX):
@@ -40,6 +41,7 @@ def scalar_vector_ntt(c: int, v: np.ndarray) -> np.ndarray:
 def matrix_vector_ntt(M: np.ndarray, v: np.ndarray) -> np.ndarray:
     '''
     Computes the product M ∘ v of a matrix M and a vector v over Tq.
+    Returns a Matrix
     '''
     w = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(K_MATRIX):
