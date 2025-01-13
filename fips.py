@@ -109,6 +109,8 @@ def skDecode(sk : bitarray) -> Tuple[bitarray, bitarray, bitarray, np.ndarray, n
     Reverses the procedure skEncode, where SK is a 
     32 + 32 + 64 + 32 x (bitlen(l+k) + (2n) + dk + 8) bit string
     '''
+
+    #TODO: NOTE JOEY, WITH STD SETTINGS SK SHOULD BE 2560 BYTES LONG
     rho = sk[:256]
     k = sk[256:512]
     tr = sk[512:1024]
@@ -117,8 +119,7 @@ def skDecode(sk : bitarray) -> Tuple[bitarray, bitarray, bitarray, np.ndarray, n
     z = np.ndarray(K_MATRIX, dtype=bitarray)
     w = np.ndarray(K_MATRIX, dtype=bitarray)
 
-    #TODO: figure out appropriate var title for this! What are Y and Z?
-    y_z_len = 8 * 32 * (2 * N_PRIVATE_KEY_RANGE).bit_length()
+    y_z_len = 8 * 32 * ((2 * N_PRIVATE_KEY_RANGE).bit_length())
 
 
     #Retrieve Y, Z, and W arrays from SK
@@ -162,7 +163,6 @@ def w1_encode(w1: np.ndarray) -> bitarray:
     for i in range(K_MATRIX):
         w_hat += simple_bit_pack(w1[i], bit_pack_bound)
     return w_hat
-
 
 
 
@@ -237,15 +237,15 @@ def rej_bounded_poly(rho: bitarray) -> np.ndarray:
     c = 0
     a = np.empty(VECTOR_ARRAY_SIZE)
 
-    extended_seed_length = int(bit_ind_conv(VECTOR_ARRAY_SIZE) * 1.5 )#Minimum is 256 * 8= 2048 bytes. TODO OPTIMIZE
-
-    extended_seed = h_shake128(rho.tobytes(),extended_seed_length)
-
+    ctx = h_init()
+    ctx = hash_absorb(ctx, rho)
 
     while j < VECTOR_ARRAY_SIZE:
-        z = bitarr_get_byte(extended_seed, c)
+        ctx, z_bit = hash_squeeze(ctx, 8)
+        z = ba2int(z_bit)
         z0 = coeff_from_half_byte(z % 16)
         z1 = coeff_from_half_byte(z // 16)
+
         if z0 is not None:
             a[j] = z0
             j += 1
@@ -330,7 +330,7 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
             t1[i][j], t0[i][j] = power_2_round(t[i][j])
 
     pk = pkEncode(rho, t1)
-    tr = h_shake256(pk.tobytes(), 64)
+    tr = h_shake256(pk.tobytes(), 64 * 8)
     sk = skEncode(rho, k, tr, s1, s2, t0)
     return pk, sk
 
@@ -366,6 +366,7 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
 
     kappa = 0
     z, h = None, None
+    
     while z is None or h is None:
         print(f"Kappa: {kappa}")
         y = expand_mask(rho_double_prime, kappa)
@@ -385,7 +386,7 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         c_hash_seed_bytes = (mu + w1_encode(w1)).tobytes()
         c_hash = h_shake256(c_hash_seed_bytes, LAMBDA_COLLISION_STR // 4)
         c = sample_in_ball(c_hash)
-
+        
         c_hat = NTT(c)
 
         cs1_prod = scalar_vector_ntt(c_hat, s1_hat)
@@ -400,12 +401,15 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         for i in range(K_MATRIX):
             for j in range(VECTOR_ARRAY_SIZE):
                 r0[i][j] = low_bits(w[i][j] - cs2[i][j])
+
         print(f"z: {z.max()} >= {GAMMA_1_COEFFICIENT - BETA} or r0: {r0.max()} >= {GAMMA_2_LOW_ORDER_ROUND - BETA}")
         if z.max() >= (GAMMA_1_COEFFICIENT - BETA) or r0.max() >= (GAMMA_2_LOW_ORDER_ROUND - BETA):
             z, h = None, None
         else:
-            ct0 = "ee"
-
+            ct0_prod = scalar_vector_ntt(c_hat, t0_hat)
+            ct0 = [NTT_inv(sub) for sub in ct0_prod]
+        kappa += L_MATRIX
+    sig = 2
 
 def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> Any:
     #lmao figure out what return type is

@@ -16,7 +16,7 @@ def new_bitarray(*args, **kwargs):
 def integer_to_bits(x: int, a: int) -> bitarray:
     '''
     Computes the base-2 representation of x mod 2a (using in little-endian order). 
-   
+    '''
 
     y = (x >> np.arange(a)) & 1
     
@@ -25,8 +25,8 @@ def integer_to_bits(x: int, a: int) -> bitarray:
     bits.extend(y.astype(bool))  # Convert y to bool array, as bitarray works well with bools
     
     return bits
-    '''
-    return int2ba(x, endian="little")
+    
+    #return int2ba(x[:a], endian="little")
 
 def integer_to_bytes(x: int, a: int) -> bytes:
     '''
@@ -48,7 +48,7 @@ bit_arr_to_int = lambda bit_array : ba2int(bit_array)
 def bits_to_integer(y: bitarray, a: int) -> int:
     '''
     Computes the integer represented by the base-2 representation y mod 2a.
-    
+    '''
     x = 0
     for i in range(1, a + 1):
         x = (2 * x) + y[a - i]
@@ -58,6 +58,7 @@ def bits_to_integer(y: bitarray, a: int) -> int:
         return 0
         
     return ba2int(y)
+    '''
 
 def coeff_from_three_bytes(b0: int, b1: int, b2: int) -> int:
     if b2 > 127:
@@ -125,6 +126,13 @@ def low_bits(r: int) -> int:
     r1, r0 = decompose(r)
     return r0
 
+def make_hint(z: int, r: int)-> bool:
+    '''
+    Computes hint bit indicating whether adding 𝑧 to 𝑟 alters the high bits of 𝑟.
+    '''
+    r1 = high_bits(r)
+    v1 = high_bits(r + z)
+    return r1 != v1
 
 #BOTTOM FOUR ORIGINALLY RETURN BYTE ARRAYS, WE'RE WORKING
 #IN BIT ARRAYS
@@ -145,8 +153,9 @@ def bit_pack(w: np.ndarray, a: int, b: int) -> bitarray:
     coefficients of w are all in [-a, b]
     '''
     z = new_bitarray()
+    int_bl = (a + b).bit_length()
     for i in range(VECTOR_ARRAY_SIZE):
-        z += integer_to_bits(b - int(w[i]), (a + b).bit_length())
+        z += integer_to_bits(int(b - w[i]), int_bl)
     return z
 
 def simple_bit_unpack(v: bitarray, b: int) -> np.ndarray:
