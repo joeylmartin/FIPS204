@@ -2,6 +2,7 @@ from bitarray import bitarray
 from bitarray.util import ba2int, int2ba
 import numpy as np
 from typing import Tuple
+import math
 from parametres import VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND
 
 from bitarray import bitarray
@@ -180,4 +181,12 @@ def bit_unpack(v: bitarray, a: int, b: int) -> np.ndarray:
         w[i] = b - bits_to_integer(v[i * c : (i * c) + c], c)
     return w
 
-
+def montgomery_reduce(a: int) -> int:
+    '''
+    Computes a * (2^-32) % q
+    '''
+    two32 = math.pow(2,32)
+    QINV = 58728449 #inverse of q mod 2^32
+    t = ((a % two32) * QINV) % two32
+    r = (a - t * Q_MODULUS) // two32
+    return r

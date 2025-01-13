@@ -25,7 +25,7 @@ def add_vector_ntt(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     '''
     u = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(L_MATRIX):
-        u[i] = add_ntt(v[i], w[i])
+        u[i] = add_ntt(v[i], w[i]) 
     return u
 
 def scalar_vector_ntt(c: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -46,5 +46,5 @@ def matrix_vector_ntt(M: np.ndarray, v: np.ndarray) -> np.ndarray:
     w = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(K_MATRIX):
         for j in range(L_MATRIX):
-            w[i] = add_ntt(w[i], multiply_ntt(M[i][j], v[j]))
+            w[i] = add_ntt(w[i], multiply_ntt(M[i][j], v[j])) 
     return w

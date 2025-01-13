@@ -60,12 +60,12 @@ def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
                 t = w[j]
                 w[j] = (t + w[j + len]) % Q_MODULUS
                 w[j + len] = (t - w[j + len]) % Q_MODULUS
-                w[j+len] = (zeta * w[j+len]) % Q_MODULUS
+                w[j + len] = (zeta * w[j + len]) % Q_MODULUS
             start += 2 * len
         len *= 2
     f = 8347681
-    w = [(f * j) % Q_MODULUS for j in w] #d swap
-    return w
+    wj = [(f * j) % Q_MODULUS for j in w] #todo check if reassignment breaks
+    return wj
 
 
 
@@ -289,7 +289,7 @@ def expand_mask(rho: bitarray, mu: int) -> np.ndarray:
     '''
     y = np.empty((L_MATRIX,VECTOR_ARRAY_SIZE), dtype='int')
 
-    c = 1 + (GAMMA_1_COEFFICIENT - 1).bit_length()
+    c = (GAMMA_1_COEFFICIENT - 1).bit_length() + 1
 
     for r in range(L_MATRIX):
         rho_prime = rho + integer_to_bits(mu + r, 16)
@@ -418,22 +418,24 @@ def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> Any:
     if ctx.nbytes > 255:
         return None
 
-    seed = random.getrandbits(256) #change to approved RBG
+    #seed = random.getrandbits(256) #change to approved RBG
 
-    temp = seed.to_bytes(32, BYTEORDER)
-
+    #temp = seed.to_bytes(32, BYTEORDER)
+    temp = (0).to_bytes(32, BYTEORDER)
     rnd = new_bitarray()
     rnd.frombytes(temp)
 
     m_prime = integer_to_bits(0, 8) + integer_to_bits(int(len(ctx) / 8), 8) + ctx + m
     sigma = ml_dsa_sign_internal(sk, m_prime, rnd)
+    return sigma
 
 pk, sk = ml_dsa_key_gen()
 
-ctx_b = bytes("testingshit", 'utf-8')
+ctx_b = bytes("", 'utf-8')
 ctx = new_bitarray()
 ctx.frombytes(ctx_b)
 
-m = bitarray("10000111100101100")
+m = bitarray("1")
+#m = bitarray("10000111100101100")
 
 sigma = ml_dsa_sign(sk, m, ctx)
