@@ -5,7 +5,7 @@ def add_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     '''
     Add two NTT polynomials; returns a scalar
     '''
-    c = np.empty(VECTOR_ARRAY_SIZE)
+    c = np.zeros(VECTOR_ARRAY_SIZE)
     for i in range(VECTOR_ARRAY_SIZE):
         c[i] = (a[i] + b[i]) % Q_MODULUS
     return c 
@@ -14,7 +14,7 @@ def multiply_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     '''
     Multiply two NTT polynomials; returns a scalar
     '''
-    c = np.empty(VECTOR_ARRAY_SIZE)
+    c = np.zeros(VECTOR_ARRAY_SIZE)
     for i in range(VECTOR_ARRAY_SIZE):
         c[i] = (a[i] * b[i]) % Q_MODULUS
     return c
@@ -23,7 +23,7 @@ def add_vector_ntt(v: np.ndarray, w: np.ndarray) -> np.ndarray:
     '''
     Add two NTT vectors; returns a vector
     '''
-    u = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE))
+    u = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(L_MATRIX):
         u[i] = add_ntt(v[i], w[i]) 
     return u
@@ -33,7 +33,7 @@ def scalar_vector_ntt(c: np.ndarray, v: np.ndarray) -> np.ndarray:
     Computes the product c ∘ v of a scalar c and a vector v over Tq. 
     Returns a vector
     '''
-    w = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE))
+    w = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE))
     for i in range(L_MATRIX):
         w[i] = multiply_ntt(c, v[i])
     return w

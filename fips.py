@@ -8,7 +8,7 @@ from bitarray import bitarray, _set_default_endian
 from parametres import *
 from ntt_arithmetic import *
 from auxiliary_funcs import *
-from hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze
+from hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze, g_init
 
 #d swap = DECLARATIVE IMPLEMENTATION OF IMPERATIVE STUFF
 
@@ -64,7 +64,7 @@ def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
             start += 2 * len
         len *= 2
     f = 8347681
-    wj = [(f * j) % Q_MODULUS for j in w] #todo check if reassignment breaks
+    wj = np.array([(f * j) % Q_MODULUS for j in w]) #todo check if reassignment breaks
     return wj
 
 
@@ -79,15 +79,16 @@ def bitarr_get_byte(bits: bitarray, byte_index: int) -> int:
     return bit_arr_to_int(bits[slice0:slice1])
 
 
-#ORIGINALLY BYTE ARRAY
+
 def pkEncode(rho : bitarray, t1 : np.ndarray) -> bitarray:
     '''
     Encodes a public key for ML-DSA into a byte string.
     Where T1 is K polynomials (k x 256 np array)
     '''
     pk = rho.copy()
+    bit_len = int(math.pow(2, ((Q_MODULUS - 1).bit_length() - D_DROPPED_BITS)) - 1)
     for i in range(K_MATRIX):
-        pk = pk + simple_bit_pack(t1[i], 10)
+        pk += simple_bit_pack(t1[i], bit_len)
     return pk
 
 def skEncode(rho : bitarray, k : bitarray, tr : bitarray, s1 : np.ndarray, s2 : np.ndarray, t0 : np.ndarray) -> bitarray:
@@ -154,6 +155,18 @@ def skDecode(sk : bitarray) -> Tuple[bitarray, bitarray, bitarray, np.ndarray, n
     return rho, k, tr, s1, s2, t0
 
 
+
+def sigEncode(c_hash : bitarray, z : np.ndarray, h : np.ndarray) -> bitarray:
+    '''
+    Encodes a signature for ML-DSA into a bit string.
+    '''
+    sig = c_hash.copy()
+    for i in range(L_MATRIX):
+        sig += bit_pack(z[i], GAMMA_1_COEFFICIENT - 1, GAMMA_1_COEFFICIENT)
+    for i in range(K_MATRIX):
+        sig += hint_bit_pack(h[i], GAMMA_2_LOW_ORDER_ROUND)
+    return sig
+
 def w1_encode(w1: np.ndarray) -> bitarray:
     '''
     Encodes a polynomial w1 into a bit string.
@@ -188,43 +201,30 @@ def sample_in_ball(rho: bitarray) -> np.ndarray:
         c[j] = (-1) ** temp
 
     return c
-# USE A DECORATOR TO MANAGE EXTENDED SEED BETWEEN ROUNDS
-def rej_ntt_poly(rho: bitarray):
-    #where seed is bitstring of length 272
+
+def rej_ntt_poly(rho: bitarray) -> np.ndarray:
+    '''
+    Samples an polynomial in Tq,
+    where Rho is a 272 bit string. 
+    '''
 
     j = 0
-    c = 0
     a = np.empty(VECTOR_ARRAY_SIZE)
 
-
-    #We extend the seed to source our coefficients (by indexing the C'th, C+1'th and C+2'th bytes). 
-    #However, it is unbounded, and C will keep increasing until we have satifised 256 distinct coefficients.
-    #We want to extend the  minimize the amount of times we have to extend the seed.
-
-    extended_seed_length = bit_ind_conv(VECTOR_ARRAY_SIZE) * 3 #Minimum is 3 * 256 * 8= 768 bytes. TODO OPTIMIZE
-
-    extended_seed = h_shake128(rho, extended_seed_length)
+    ctx = g_init()
+    ctx = hash_absorb(ctx, rho)
 
     while j < 256:
+        ctx, s_bit = hash_squeeze(ctx, 24)
 
-        #If we have exhausted the seed, extend it.
-        if bit_ind_conv(c + 3) > extended_seed_length:
-            extended_seed_length += VECTOR_ARRAY_SIZE
-            #print(extended_seed_length)
-            extended_seed = h_shake128(rho.tobytes(), extended_seed_length)
-        
-        byte_0 = bitarr_get_byte(extended_seed, c)        
-        byte_1 = bitarr_get_byte(extended_seed, c + 1)             
-        byte_2 = bitarr_get_byte(extended_seed, c + 2)     
+        byte_0 = bitarr_get_byte(s_bit, 0)        
+        byte_1 = bitarr_get_byte(s_bit, 1)             
+        byte_2 = bitarr_get_byte(s_bit, 2)     
 
-        coeff = coeff_from_three_bytes(byte_0,byte_1, byte_2)
-            
-        c += 3
+        a[j] = coeff_from_three_bytes(byte_0,byte_1, byte_2)
 
-        if coeff is not None:
-            a[j] = coeff
+        if a[j] is not None:
             j += 1
-
 
     return a
 
@@ -234,15 +234,14 @@ def rej_bounded_poly(rho: bitarray) -> np.ndarray:
     Rho is a 528 bit string. 
     '''
     j = 0
-    c = 0
     a = np.empty(VECTOR_ARRAY_SIZE)
 
     ctx = h_init()
     ctx = hash_absorb(ctx, rho)
 
     while j < VECTOR_ARRAY_SIZE:
-        ctx, z_bit = hash_squeeze(ctx, 8)
-        z = ba2int(z_bit)
+        ctx_, z_bit = hash_squeeze(ctx, 8)
+        z = ba2int(z_bit) #conv bitarray to int
         z0 = coeff_from_half_byte(z % 16)
         z1 = coeff_from_half_byte(z // 16)
 
@@ -252,7 +251,6 @@ def rej_bounded_poly(rho: bitarray) -> np.ndarray:
         if z1 is not None and j < VECTOR_ARRAY_SIZE:
             a[j] = z1
             j += 1
-        c += 1
 
     return a
 
@@ -261,11 +259,12 @@ def expand_a(rho: bitarray) -> np.ndarray:
     '''
     Samples a k x l matrix A of elements of Tq; where Rho is a 256 bit string
     '''
-    matrix = np.empty((K_MATRIX, L_MATRIX, VECTOR_ARRAY_SIZE))
+    matrix = np.empty((K_MATRIX, L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
 
     for r in range(0, K_MATRIX):
-        for s in range(0, L_MATRIX):
-            matrix[r][s] = rej_ntt_poly(rho + integer_to_bits(s, 8) + integer_to_bits(r, 8))
+        for s in range(0, L_MATRIX): 
+            rho_prime = rho + integer_to_bits(s, 8) + integer_to_bits(r, 8)
+            matrix[r][s] = rej_ntt_poly(rho_prime)
     
     return matrix
 
@@ -299,13 +298,10 @@ def expand_mask(rho: bitarray, mu: int) -> np.ndarray:
     return y
 
 def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
-
-    #todo: update extension with matrix sampling!!! outdated
-    #extend seed to 1024 bits with SHAKE-256
-
-    h_input = seed + integer_to_bytes(K_MATRIX, 1) + integer_to_bytes(L_MATRIX, 1)
-
-    extended_seed = h_shake256(h_input, 1024)
+    '''
+    Generates a public-private key pair.
+    '''
+    extended_seed = h_shake256(seed + integer_to_bytes(K_MATRIX, 1) + integer_to_bytes(L_MATRIX, 1), 1024)
 
     rho = extended_seed[:256] #first 256 bits
     rho_prime = extended_seed[256:768] #middle 512 bits
@@ -377,25 +373,25 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         w = [NTT_inv(x) for x in w_temp_prod]
 
         #highbits() is applied componentwise to produce w1
-        w1 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
-        for i in range(K_MATRIX):
+        w1 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int') #TODO may be k matrix
+        for i in range(L_MATRIX):
             for j in range(VECTOR_ARRAY_SIZE):
                 w1[i][j] = high_bits(w[i][j])
   
 
         c_hash_seed_bytes = (mu + w1_encode(w1)).tobytes()
-        c_hash = h_shake256(c_hash_seed_bytes, LAMBDA_COLLISION_STR // 4)
+        c_hash = h_shake256(c_hash_seed_bytes, 2 * LAMBDA_COLLISION_STR)
         c = sample_in_ball(c_hash)
         
         c_hat = NTT(c)
 
-        cs1_prod = scalar_vector_ntt(c_hat, s1_hat)
-        cs1 = [NTT_inv(sub) for sub in cs1_prod]
+        cs1_prod = scalar_vector_ntt(c_hat, s1_hat) 
+        cs1 = np.array([NTT_inv(sub) for sub in cs1_prod]) #looks like culrpit is CS1
 
         cs2_prod = scalar_vector_ntt(c_hat, s2_hat)
-        cs2 = [NTT_inv(sub) for sub in cs2_prod]
+        cs2 = np.array([NTT_inv(sub) for sub in cs2_prod])
 
-        z = add_vector_ntt(y, cs2)
+        z = add_vector_ntt(y, cs1)
         
         r0 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
         for i in range(K_MATRIX):
@@ -408,14 +404,22 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         else:
             ct0_prod = scalar_vector_ntt(c_hat, t0_hat)
             ct0 = [NTT_inv(sub) for sub in ct0_prod]
+
+            h = make_hint([-x for f in ct0], add_vector_ntt(w, add_vector_ntt(-cs2, ct0)))
+
+            num_ones = np.count_nonzero(h == 1)
+            if ct0.max() >= GAMMA_2_LOW_ORDER_ROUND or num_ones > W_MAX_HINT_ONES:
+                z, h = None, None
+
         kappa += L_MATRIX
+
     sig = 2
 
 def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> Any:
     #lmao figure out what return type is
     
     #context string cannot exceed 255 bytes
-    if ctx.nbytes > 255:
+    if ctx.nbytes > (255 * 8):
         return None
 
     #seed = random.getrandbits(256) #change to approved RBG

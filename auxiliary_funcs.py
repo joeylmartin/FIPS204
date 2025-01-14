@@ -3,7 +3,7 @@ from bitarray.util import ba2int, int2ba
 import numpy as np
 from typing import Tuple
 import math
-from parametres import VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND
+from parametres import VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND, W_MAX_HINT_ONES
 
 from bitarray import bitarray
 
@@ -96,8 +96,8 @@ def power_2_round(r: int) -> Tuple[int, int]:
     Decomposes r into (r1, r0) such that r ≡ r1 2^d + r0 mod q.
     '''
     r_pos = r % Q_MODULUS
-    r0 = mod_pm(r_pos, np.pow(2, D_DROPPED_BITS))
-    return (r_pos - r0) // (np.pow(2, D_DROPPED_BITS)), r0
+    r0 = mod_pm(r_pos, math.pow(2, D_DROPPED_BITS))
+    return int((r_pos - r0) / (np.pow(2, D_DROPPED_BITS))), r0
 
 def decompose(r: int) -> Tuple[int, int]:
     '''
@@ -180,6 +180,22 @@ def bit_unpack(v: bitarray, a: int, b: int) -> np.ndarray:
     for i in range(VECTOR_ARRAY_SIZE):
         w[i] = b - bits_to_integer(v[i * c : (i * c) + c], c)
     return w
+
+def hint_bit_pack(h: np.ndarray) -> bitarray:
+    '''
+    Encodes a hint vector h ^ k (of ring 2) into a bit string, such that the polynomial
+    h's coefficients have at most w nonzeroes.
+    '''
+    y = new_bitarray()
+    index = 0
+    for i in range(K_MATRIX):
+        for j in range(VECTOR_ARRAY_SIZE):
+            if h[i][j] != 0:
+                y[index] = j
+                index += 1
+        y[W_MAX_HINT_ONES + i] = index
+
+    return z
 
 def montgomery_reduce(a: int) -> int:
     '''
