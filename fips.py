@@ -64,6 +64,10 @@ def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
             start += 2 * len
         len *= 2
     f = 8347681
+    '''
+    wj = np.array([(f * j) % Q_MODULUS for j in w])
+    wj = np.where(wj > Q_MODULUS // 2, wj - Q_MODULUS, wj)
+    '''
     wj = np.array([(f * j) % Q_MODULUS for j in w]) #todo check if reassignment breaks
     return wj
 
@@ -139,9 +143,9 @@ def skDecode(sk : bitarray) -> Tuple[bitarray, bitarray, bitarray, np.ndarray, n
         w[i] = sk[index : index + w_len]
         index += w_len
 
-    s1 = np.ndarray((L_MATRIX,VECTOR_ARRAY_SIZE), dtype='int')
-    s2 = np.ndarray((K_MATRIX,VECTOR_ARRAY_SIZE), dtype='int')
-    t0 = np.ndarray((K_MATRIX,VECTOR_ARRAY_SIZE), dtype='int')
+    s1 = np.ndarray((L_MATRIX,VECTOR_ARRAY_SIZE), dtype='int64')
+    s2 = np.ndarray((K_MATRIX,VECTOR_ARRAY_SIZE), dtype='int64')
+    t0 = np.ndarray((K_MATRIX,VECTOR_ARRAY_SIZE), dtype='int64')
 
     for i in range(L_MATRIX):
         s1[i] = bit_unpack(y[i], N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE)
@@ -183,7 +187,7 @@ def w1_encode(w1: np.ndarray) -> bitarray:
 
 def sample_in_ball(rho: bitarray) -> np.ndarray:
 
-    c = np.zeros(VECTOR_ARRAY_SIZE, dtype='int')
+    c = np.zeros(VECTOR_ARRAY_SIZE, dtype='int64')
 
     ctx = h_init()
     ctx = hash_absorb(ctx, rho)
@@ -198,7 +202,8 @@ def sample_in_ball(rho: bitarray) -> np.ndarray:
 
         c[i] = c[j]
         temp = h[i+TAU_ONES - 256]
-        c[j] = (-1) ** temp
+        temp2 = math.pow(-1,temp)
+        c[j] = temp2
 
     return c
 
@@ -209,7 +214,7 @@ def rej_ntt_poly(rho: bitarray) -> np.ndarray:
     '''
 
     j = 0
-    a = np.empty(VECTOR_ARRAY_SIZE)
+    a = np.empty(VECTOR_ARRAY_SIZE, dtype='int64')
 
     ctx = g_init()
     ctx = hash_absorb(ctx, rho)
@@ -221,9 +226,9 @@ def rej_ntt_poly(rho: bitarray) -> np.ndarray:
         byte_1 = bitarr_get_byte(s_bit, 1)             
         byte_2 = bitarr_get_byte(s_bit, 2)     
 
-        a[j] = coeff_from_three_bytes(byte_0,byte_1, byte_2)
-
-        if a[j] is not None:
+        res = coeff_from_three_bytes(byte_0,byte_1, byte_2)
+        if res is not None:
+            a[j] = res
             j += 1
 
     return a
@@ -240,7 +245,7 @@ def rej_bounded_poly(rho: bitarray) -> np.ndarray:
     ctx = hash_absorb(ctx, rho)
 
     while j < VECTOR_ARRAY_SIZE:
-        ctx_, z_bit = hash_squeeze(ctx, 8)
+        ctx, z_bit = hash_squeeze(ctx, 8)
         z = ba2int(z_bit) #conv bitarray to int
         z0 = coeff_from_half_byte(z % 16)
         z1 = coeff_from_half_byte(z // 16)
@@ -259,7 +264,7 @@ def expand_a(rho: bitarray) -> np.ndarray:
     '''
     Samples a k x l matrix A of elements of Tq; where Rho is a 256 bit string
     '''
-    matrix = np.empty((K_MATRIX, L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
+    matrix = np.zeros((K_MATRIX, L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
 
     for r in range(0, K_MATRIX):
         for s in range(0, L_MATRIX): 
@@ -274,7 +279,7 @@ def expand_s(rho: bitarray) -> Tuple[np.ndarray, np.ndarray]:
     Samples vectors s1 ∈ Rlq and s2 ∈ Rkq, each with 
     coeffcients in the interval [−η,η].
     '''
-    s1, s2 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int'), np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
+    s1, s2 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64'), np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for r in range(L_MATRIX):
         s1[r] = rej_bounded_poly(rho + integer_to_bits(r, 16))
     for r in range(K_MATRIX):
@@ -286,7 +291,7 @@ def expand_mask(rho: bitarray, mu: int) -> np.ndarray:
     Samples a vector y ∈ Rl  such that each polynomial y[r] 
     has coefficients between −𝛾 +1 and 𝛾1. 
     '''
-    y = np.empty((L_MATRIX,VECTOR_ARRAY_SIZE), dtype='int')
+    y = np.empty((L_MATRIX,VECTOR_ARRAY_SIZE), dtype='int64')
 
     c = (GAMMA_1_COEFFICIENT - 1).bit_length() + 1
 
@@ -317,8 +322,8 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
 
 
     #TODO: double check which uses L_MATRIX!! One of them is wrong, maybe?
-    t0 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
-    t1 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
+    t0 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+    t1 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
 
     #apply power2round component-wise
     for i in range(K_MATRIX):
@@ -364,16 +369,16 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
     z, h = None, None
     
     while z is None or h is None:
-        print(f"Kappa: {kappa}")
         y = expand_mask(rho_double_prime, kappa)
-        print(f"Kappa: {kappa}")
 
         #Hadamard product of A and NTT of y
         w_temp_prod = matrix_vector_ntt(a_hat, [NTT(x) for x in y])
         w = [NTT_inv(x) for x in w_temp_prod]
 
+        w_inv = [NTT(x) for x in w] #should be equal to w_temp_prod
+
         #highbits() is applied componentwise to produce w1
-        w1 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int') #TODO may be k matrix
+        w1 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64') #TODO may be k matrix
         for i in range(L_MATRIX):
             for j in range(VECTOR_ARRAY_SIZE):
                 w1[i][j] = high_bits(w[i][j])
@@ -385,20 +390,27 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         
         c_hat = NTT(c)
 
+        c_hat_inv = NTT_inv(c_hat)
+
         cs1_prod = scalar_vector_ntt(c_hat, s1_hat) 
         cs1 = np.array([NTT_inv(sub) for sub in cs1_prod]) #looks like culrpit is CS1
+
+        cs1_inv = np.array([NTT(x) for x in cs1])
 
         cs2_prod = scalar_vector_ntt(c_hat, s2_hat)
         cs2 = np.array([NTT_inv(sub) for sub in cs2_prod])
 
+        cs2_inv = np.array([NTT(x) for x in cs2])
+
         z = add_vector_ntt(y, cs1)
         
-        r0 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int')
+        r0 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
         for i in range(K_MATRIX):
             for j in range(VECTOR_ARRAY_SIZE):
                 r0[i][j] = low_bits(w[i][j] - cs2[i][j])
-
-        print(f"z: {z.max()} >= {GAMMA_1_COEFFICIENT - BETA} or r0: {r0.max()} >= {GAMMA_2_LOW_ORDER_ROUND - BETA}")
+        
+        print(z.max())
+        #print(f"z: {z.max()} >= {GAMMA_1_COEFFICIENT - BETA} or r0: {r0.max()} >= {GAMMA_2_LOW_ORDER_ROUND - BETA}")
         if z.max() >= (GAMMA_1_COEFFICIENT - BETA) or r0.max() >= (GAMMA_2_LOW_ORDER_ROUND - BETA):
             z, h = None, None
         else:
@@ -439,7 +451,7 @@ ctx_b = bytes("", 'utf-8')
 ctx = new_bitarray()
 ctx.frombytes(ctx_b)
 
-m = bitarray("1")
+m = bitarray("010101010000101010100000010101010101001001010010101010010101100101001010101")
 #m = bitarray("10000111100101100")
 
 sigma = ml_dsa_sign(sk, m, ctx)

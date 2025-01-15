@@ -2,7 +2,6 @@ import hashlib
 from bitarray import bitarray
 from math import ceil
 
-
 from Crypto.Hash import SHAKE128, SHAKE256
 from typing import Union
 

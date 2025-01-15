@@ -3,7 +3,7 @@ from bitarray.util import ba2int, int2ba
 import numpy as np
 from typing import Tuple
 import math
-from parametres import VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND, W_MAX_HINT_ONES
+from parametres import K_MATRIX, VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND, W_MAX_HINT_ONES
 
 from bitarray import bitarray
 
@@ -18,15 +18,21 @@ def integer_to_bits(x: int, a: int) -> bitarray:
     '''
     Computes the base-2 representation of x mod 2a (using in little-endian order). 
     '''
-
+    x_h = x
+    y = list()
+    for i in range(a):
+        y.append(x_h % 2)
+        x_h = x_h // 2
+    return new_bitarray(y)
+    '''
     y = (x >> np.arange(a)) & 1
     
     # Initialize a bitarray and extend it with the computed bits
     bits = new_bitarray()
     bits.extend(y.astype(bool))  # Convert y to bool array, as bitarray works well with bools
     
-    return bits
-    
+    return bits'''
+
     #return int2ba(x[:a], endian="little")
 
 def integer_to_bytes(x: int, a: int) -> bytes:
@@ -34,11 +40,11 @@ def integer_to_bytes(x: int, a: int) -> bytes:
     Computes a base-256 representation of 𝑥 mod 256𝛼  using little-endian order.
     '''
     x_prime = x
-    y = np.ndarray(a + 1, dtype='int')
-    for i in range(a + 1):
+    y = np.ndarray(a, dtype='uint8')
+    for i in range(a):
         y[i] = x_prime % 256
         x_prime = x_prime // 256
-    
+
     return y.tobytes()
 
 
@@ -62,9 +68,11 @@ def bits_to_integer(y: bitarray, a: int) -> int:
     '''
 
 def coeff_from_three_bytes(b0: int, b1: int, b2: int) -> int:
-    if b2 > 127:
-        b2 -= 128
-    z = (65536 * b2) + (256 * b1) + b0
+    b2_p = b2
+    if b2_p > 127:
+        b2_p -= 128
+
+    z = (65536 * b2_p) + (256 * b1) + b0
     if z < Q_MODULUS:
         return z
     else:
@@ -75,7 +83,7 @@ def coeff_from_half_byte(b: int) -> int:
     Generates an element of {−η,−η +1,...,η} ∪ {None}. 
     '''
     if N_PRIVATE_KEY_RANGE == 2 and b < 15:
-        return  2 - (b % 5)
+        return 2 - (b % 5)
     
     if N_PRIVATE_KEY_RANGE == 4 and b < 9:
         return 4 - b
@@ -96,8 +104,9 @@ def power_2_round(r: int) -> Tuple[int, int]:
     Decomposes r into (r1, r0) such that r ≡ r1 2^d + r0 mod q.
     '''
     r_pos = r % Q_MODULUS
-    r0 = mod_pm(r_pos, math.pow(2, D_DROPPED_BITS))
-    return int((r_pos - r0) / (np.pow(2, D_DROPPED_BITS))), r0
+    two_d = math.pow(2, D_DROPPED_BITS)
+    r0 = mod_pm(r_pos, two_d)
+    return (r_pos - r0) // two_d, r0
 
 def decompose(r: int) -> Tuple[int, int]:
     '''
@@ -106,7 +115,7 @@ def decompose(r: int) -> Tuple[int, int]:
     r_pos = r % Q_MODULUS
     r0 = mod_pm(r_pos, 2 * GAMMA_2_LOW_ORDER_ROUND)
 
-    if r_pos - r0 == Q_MODULUS - 1:
+    if r_pos - r0 + 1 == Q_MODULUS:
         r1 = 0
         r0 -= 1
     else:
@@ -117,14 +126,14 @@ def high_bits(r: int) -> int:
     '''
     Retrieves the high bits from Decompose(r) output.
     '''
-    r1, r0 = decompose(r)
+    r1, _ = decompose(r)
     return r1
 
 def low_bits(r: int) -> int:
     '''
     Retrieves the low bits from Decompose(r) output.
     '''
-    r1, r0 = decompose(r)
+    _, r0 = decompose(r)
     return r0
 
 def make_hint(z: int, r: int)-> bool:
@@ -165,9 +174,9 @@ def simple_bit_unpack(v: bitarray, b: int) -> np.ndarray:
     coefficients of the polynomial are in [0, b]
     '''
     c = b.bit_length()
-    w = np.empty(VECTOR_ARRAY_SIZE, dtype='int')
+    w = np.empty(VECTOR_ARRAY_SIZE, dtype='int64')
     for i in range(VECTOR_ARRAY_SIZE):
-        w[i] = bits_to_integer(z[i * c : (i * c) + c - 1], c)
+        w[i] = bits_to_integer(v[i * c : (i * c) + c - 1], c)
     return w
 
 def bit_unpack(v: bitarray, a: int, b: int) -> np.ndarray:
@@ -176,7 +185,7 @@ def bit_unpack(v: bitarray, a: int, b: int) -> np.ndarray:
     coefficients of the polynomial are in [-a, b]
     '''
     c = (a + b).bit_length()
-    w = np.empty(VECTOR_ARRAY_SIZE, dtype='int')
+    w = np.empty(VECTOR_ARRAY_SIZE, dtype='int64')
     for i in range(VECTOR_ARRAY_SIZE):
         w[i] = b - bits_to_integer(v[i * c : (i * c) + c], c)
     return w
@@ -195,7 +204,7 @@ def hint_bit_pack(h: np.ndarray) -> bitarray:
                 index += 1
         y[W_MAX_HINT_ONES + i] = index
 
-    return z
+    return y
 
 def montgomery_reduce(a: int) -> int:
     '''
