@@ -27,7 +27,6 @@ def load_zeta_brv_cache(cache_file='zeta_brv_k_cache.pkl'):
 cached_zeta_brv = load_zeta_brv_cache()
 
 
-
 def NTT(w: np.ndarray) -> np.ndarray:
     w_hat = w.copy() #d swap
     
@@ -64,36 +63,38 @@ def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
             start += 2 * len
         len *= 2
     f = 8347681
-    '''
-    wj = np.array([(f * j) % Q_MODULUS for j in w])
-    wj = np.where(wj > Q_MODULUS // 2, wj - Q_MODULUS, wj)
-    '''
-    wj = np.array([(f * j) % Q_MODULUS for j in w]) #todo check if reassignment breaks
-    return wj
 
-
-
-
-def bitarr_get_byte(bits: bitarray, byte_index: int) -> int:
-    slice0 = bit_ind_conv(byte_index)
-    slice1 = bit_ind_conv(byte_index + 1)
-    if(slice1 > len(bits)):
-        raise ValueError(f"{byte_index} is out of range")
-    
-    return bit_arr_to_int(bits[slice0:slice1])
-
-
+    w = np.array([(f * j) % Q_MODULUS for j in w]) 
+    return w
 
 def pkEncode(rho : bitarray, t1 : np.ndarray) -> bitarray:
     '''
-    Encodes a public key for ML-DSA into a byte string.
+    Encodes a public key for ML-DSA into a bit string.
     Where T1 is K polynomials (k x 256 np array)
     '''
     pk = rho.copy()
     bit_len = int(math.pow(2, ((Q_MODULUS - 1).bit_length() - D_DROPPED_BITS)) - 1)
+
     for i in range(K_MATRIX):
         pk += simple_bit_pack(t1[i], bit_len)
     return pk
+
+def pkDecode(pk: bitarray) -> Tuple[bitarray, np.ndarray]:
+    '''
+    Decodes a public key for ML-DSA from a bit string.
+    '''
+    rho = pk[:256]
+
+    z_len = (Q_MODULUS - 1).bit_length() - D_DROPPED_BITS #
+
+    t1 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+    index = 256
+    for i in range(K_MATRIX):
+        data = pk[index : index + (32 * 8 * z_len)]
+        t1[i] = simple_bit_unpack(data, int(math.pow(2,z_len) - 1))
+        index += 32 * 8 * z_len
+    
+    return rho, t1
 
 def skEncode(rho : bitarray, k : bitarray, tr : bitarray, s1 : np.ndarray, s2 : np.ndarray, t0 : np.ndarray) -> bitarray:
     sk = rho + k + tr
@@ -115,7 +116,6 @@ def skDecode(sk : bitarray) -> Tuple[bitarray, bitarray, bitarray, np.ndarray, n
     32 + 32 + 64 + 32 x (bitlen(l+k) + (2n) + dk + 8) bit string
     '''
 
-    #TODO: NOTE JOEY, WITH STD SETTINGS SK SHOULD BE 2560 BYTES LONG
     rho = sk[:256]
     k = sk[256:512]
     tr = sk[512:1024]
@@ -167,9 +167,30 @@ def sigEncode(c_hash : bitarray, z : np.ndarray, h : np.ndarray) -> bitarray:
     sig = c_hash.copy()
     for i in range(L_MATRIX):
         sig += bit_pack(z[i], GAMMA_1_COEFFICIENT - 1, GAMMA_1_COEFFICIENT)
-    for i in range(K_MATRIX):
-        sig += hint_bit_pack(h[i], GAMMA_2_LOW_ORDER_ROUND)
+    sig += hint_bit_pack(h)
     return sig
+
+def sigDecode(sig : bitarray) -> Tuple[bitarray, np.ndarray, np.ndarray]:
+    '''
+    Decodes a signature for ML-DSA from a bit string.
+    '''
+    c_hash = sig[:2 * LAMBDA_COLLISION_STR]
+    z = np.ndarray((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+    h = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+
+    #Z is a L x z_len array
+    z_len = 8 * 32 * (1 + (GAMMA_1_COEFFICIENT - 1).bit_length())
+
+    index = 2 * LAMBDA_COLLISION_STR
+    for i in range(L_MATRIX):
+        data = sig[index : index + z_len]
+        z[i] = bit_unpack(data, GAMMA_1_COEFFICIENT - 1, GAMMA_1_COEFFICIENT)
+        index += z_len
+
+    y = sig[index : index + ((W_MAX_HINT_ONES + K_MATRIX) * 8)]
+    temp = sig[index: ]
+    h = hint_bit_unpack(y)
+    return c_hash, z, h
 
 def w1_encode(w1: np.ndarray) -> bitarray:
     '''
@@ -348,6 +369,12 @@ def ml_dsa_key_gen() -> Tuple[bitarray, bitarray]:
     temp = seed.to_bytes(32, BYTEORDER)
     return ml_dsa_key_gen_internal(temp)
 
+def bytes_to_bitarray(temp: bytes):
+    ee = new_bitarray()
+    ee.frombytes(temp)
+    return ee
+
+
 def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
     rho, k, tr, s1, s2, t0 = skDecode(sk)
 
@@ -359,11 +386,11 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
 
     #prepend message w tr, convert to bytes, and hash
     message_bytes = (tr + m).tobytes()
-    mu = h_shake256(message_bytes, 512)
+    mu = h_shake256(message_bytes, 64 * 8)
 
     #compute private random seed
     private_seed_bytes = (k + rnd + mu).tobytes()
-    rho_double_prime = h_shake256(private_seed_bytes, 512)
+    rho_double_prime = h_shake256(private_seed_bytes, 64 * 8)
 
     kappa = 0
     z, h = None, None
@@ -375,8 +402,6 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         w_temp_prod = matrix_vector_ntt(a_hat, [NTT(x) for x in y])
         w = [NTT_inv(x) for x in w_temp_prod]
 
-        w_inv = [NTT(x) for x in w] #should be equal to w_temp_prod
-
         #highbits() is applied componentwise to produce w1
         w1 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64') #TODO may be k matrix
         for i in range(L_MATRIX):
@@ -387,20 +412,13 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         c_hash_seed_bytes = (mu + w1_encode(w1)).tobytes()
         c_hash = h_shake256(c_hash_seed_bytes, 2 * LAMBDA_COLLISION_STR)
         c = sample_in_ball(c_hash)
-        
         c_hat = NTT(c)
 
-        c_hat_inv = NTT_inv(c_hat)
-
         cs1_prod = scalar_vector_ntt(c_hat, s1_hat) 
-        cs1 = np.array([NTT_inv(sub) for sub in cs1_prod]) #looks like culrpit is CS1
-
-        cs1_inv = np.array([NTT(x) for x in cs1])
+        cs1 = np.array([NTT_inv(sub) for sub in cs1_prod])
 
         cs2_prod = scalar_vector_ntt(c_hat, s2_hat)
         cs2 = np.array([NTT_inv(sub) for sub in cs2_prod])
-
-        cs2_inv = np.array([NTT(x) for x in cs2])
 
         z = add_vector_ntt(y, cs1)
         
@@ -409,49 +427,113 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
             for j in range(VECTOR_ARRAY_SIZE):
                 r0[i][j] = low_bits(w[i][j] - cs2[i][j])
         
-        print(z.max())
-        #print(f"z: {z.max()} >= {GAMMA_1_COEFFICIENT - BETA} or r0: {r0.max()} >= {GAMMA_2_LOW_ORDER_ROUND - BETA}")
-        if z.max() >= (GAMMA_1_COEFFICIENT - BETA) or r0.max() >= (GAMMA_2_LOW_ORDER_ROUND - BETA):
+        z_inf = get_vector_infinity_norm(z)
+        r0_inf = get_vector_infinity_norm(r0)
+        if (z_inf >= (GAMMA_1_COEFFICIENT - BETA)) or (r0_inf >= (GAMMA_2_LOW_ORDER_ROUND - BETA)): 
             z, h = None, None
         else:
             ct0_prod = scalar_vector_ntt(c_hat, t0_hat)
-            ct0 = [NTT_inv(sub) for sub in ct0_prod]
-
-            h = make_hint([-x for f in ct0], add_vector_ntt(w, add_vector_ntt(-cs2, ct0)))
+            ct0 = np.array([NTT_inv(sub) for sub in ct0_prod])
+            
+            h = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+            for i in range(K_MATRIX):
+                for j in range(VECTOR_ARRAY_SIZE):
+                    h[i][j] = make_hint(-ct0[i][j], w[i][j] - cs2[i][j] + ct0[i][j])
 
             num_ones = np.count_nonzero(h == 1)
-            if ct0.max() >= GAMMA_2_LOW_ORDER_ROUND or num_ones > W_MAX_HINT_ONES:
+            ct0_inf = get_vector_infinity_norm(ct0)
+            if ct0_inf >= GAMMA_2_LOW_ORDER_ROUND or num_ones > W_MAX_HINT_ONES:
                 z, h = None, None
 
         kappa += L_MATRIX
 
-    sig = 2
+    #vectorize this
+    z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+    for i in range(L_MATRIX):
+        for j in range(VECTOR_ARRAY_SIZE):
+            z_mod[i][j] = mod_pm(z[i][j], Q_MODULUS)
 
-def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> Any:
+    sig = sigEncode(c_hash, z_mod, h)
+    return sig
+
+def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> bitarray:
     #lmao figure out what return type is
     
     #context string cannot exceed 255 bytes
-    if ctx.nbytes > (255 * 8):
-        return None
+    if ctx.nbytes > (255):
+        raise Exception("Context string can only be 255 bytes long!")
 
-    #seed = random.getrandbits(256) #change to approved RBG
+    seed = random.getrandbits(256) #change to approved RBG
 
-    #temp = seed.to_bytes(32, BYTEORDER)
-    temp = (0).to_bytes(32, BYTEORDER)
+    s_b = seed.to_bytes(32, BYTEORDER)
     rnd = new_bitarray()
-    rnd.frombytes(temp)
+    rnd.frombytes(s_b)
 
     m_prime = integer_to_bits(0, 8) + integer_to_bits(int(len(ctx) / 8), 8) + ctx + m
     sigma = ml_dsa_sign_internal(sk, m_prime, rnd)
     return sigma
 
+def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool: 
+    '''
+    Internal function to verify a signature sigma for a message M.
+    '''
+    rho, t1 = pkDecode(pk)
+    c_hash, z, h = sigDecode(sigma)
+    if h is None:
+        return False
+
+    a = expand_a(rho)
+    tr = h_shake256(pk.tobytes(), 64 * 8)
+    mu = h_shake256((tr + m).tobytes(), 64 * 8)
+    c = sample_in_ball(c_hash)
+    
+    d_p2 = math.pow(2, D_DROPPED_BITS)
+    w_a1 = matrix_vector_ntt(a, [NTT(x) for x in z])
+    w_a2 = scalar_vector_ntt(NTT(c), [NTT(d_p2 * x) for x in t1])
+    
+    w_temp_prod = add_vector_ntt(w_a1, -w_a2)
+    w_a = np.array([NTT_inv(x) for x in w_temp_prod])
+
+    w1_prime = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+    for i in range(K_MATRIX):
+        for j in range(VECTOR_ARRAY_SIZE):
+            w1_prime[i][j] = use_hint(h[i][j], w_a[i][j])
+
+    c_hash_prime = h_shake256((mu + w1_encode(w1_prime)).tobytes(), 2 * LAMBDA_COLLISION_STR)
+    temp1 = get_vector_infinity_norm(z)
+    temp2 = GAMMA_1_COEFFICIENT - BETA
+    temp3 = c_hash == c_hash_prime
+    return (get_vector_infinity_norm(z) < (GAMMA_1_COEFFICIENT - BETA)) and (c_hash == c_hash_prime)
+
+def ml_dsa_verify(pk: bitarray, m: bitarray, sigma: bitarray, ctx: bitarray) -> bool:
+    '''
+    Verifies signature sigma for a message M.
+    '''
+    if ctx.nbytes > (255):
+        raise Exception("Context string can only be 255 bytes long!")
+
+    m_prime = integer_to_bits(0, 8) + integer_to_bits(ctx.nbytes, 8) + ctx + m
+    return ml_dsa_verify_internal(pk, m_prime, sigma)
+
+
+
+
 pk, sk = ml_dsa_key_gen()
 
-ctx_b = bytes("", 'utf-8')
+ctx_b = b""
 ctx = new_bitarray()
 ctx.frombytes(ctx_b)
 
-m = bitarray("010101010000101010100000010101010101001001010010101010010101100101001010101")
-#m = bitarray("10000111100101100")
+m = b"test message!"
+m_b = new_bitarray()
+m_b.frombytes(m)
 
-sigma = ml_dsa_sign(sk, m, ctx)
+sigma = ml_dsa_sign(sk, m_b, ctx)
+
+#TODO: verify all L_MATRIX AND K_MATRIX ITERATIONS TO WORK W/ OTHER
+#SECURITY SETTINGS
+
+#verified only works ~70% of time. Verify this!!
+verified = ml_dsa_verify(pk, m_b, sigma, ctx)
+print(verified)
+
