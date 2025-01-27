@@ -500,9 +500,7 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
             w1_prime[i][j] = use_hint(h[i][j], w_a[i][j])
 
     c_hash_prime = h_shake256((mu + w1_encode(w1_prime)).tobytes(), 2 * LAMBDA_COLLISION_STR)
-    temp1 = get_vector_infinity_norm(z)
-    temp2 = GAMMA_1_COEFFICIENT - BETA
-    temp3 = c_hash == c_hash_prime
+
     return (get_vector_infinity_norm(z) < (GAMMA_1_COEFFICIENT - BETA)) and (c_hash == c_hash_prime)
 
 def ml_dsa_verify(pk: bitarray, m: bitarray, sigma: bitarray, ctx: bitarray) -> bool:
@@ -515,25 +513,23 @@ def ml_dsa_verify(pk: bitarray, m: bitarray, sigma: bitarray, ctx: bitarray) -> 
     m_prime = integer_to_bits(0, 8) + integer_to_bits(ctx.nbytes, 8) + ctx + m
     return ml_dsa_verify_internal(pk, m_prime, sigma)
 
+for i in range(20):
+    pk, sk = ml_dsa_key_gen()
 
+    ctx_b = b""
+    ctx = new_bitarray()
+    ctx.frombytes(ctx_b)
 
+    m = b"test message!"
+    m_b = new_bitarray()
+    m_b.frombytes(m)
 
-pk, sk = ml_dsa_key_gen()
+    sigma = ml_dsa_sign(sk, m_b, ctx) 
 
-ctx_b = b""
-ctx = new_bitarray()
-ctx.frombytes(ctx_b)
+    #TODO: verify all L_MATRIX AND K_MATRIX ITERATIONS TO WORK W/ OTHER
+    #SECURITY SETTINGS
 
-m = b"test message!"
-m_b = new_bitarray()
-m_b.frombytes(m)
-
-sigma = ml_dsa_sign(sk, m_b, ctx)
-
-#TODO: verify all L_MATRIX AND K_MATRIX ITERATIONS TO WORK W/ OTHER
-#SECURITY SETTINGS
-
-#verified only works ~70% of time. Verify this!!
-verified = ml_dsa_verify(pk, m_b, sigma, ctx)
-print(verified)
+    #verified only works ~70% of time. Verify this!!
+    verified = ml_dsa_verify(pk, m_b, sigma, ctx)
+    print(verified)
 

@@ -117,7 +117,20 @@ def mod_pm(x, q):
     r = x % q
     if r > q // 2:
         r -= q
+    elif r < -(q // 2):
+        r += q
     return r
+
+def mod_pm_vector(x: np.ndarray, q: int) -> np.ndarray:
+    '''
+    mod_pm on np arrays. Used for finding infinity norms of a vector.
+    This is an expensive operation, ergo the numpy functions are used to
+    speed it up.
+    '''
+    r = x % q
+    r = np.where(r > q // 2, r - q, r)  # Map values greater than q/2 to the negative range
+    return r
+
 
 def power_2_round(r: int) -> Tuple[int, int]:
     '''
@@ -271,7 +284,7 @@ def hint_bit_unpack(y: bitarray) -> np.ndarray:
 
 def montgomery_reduce(a: int) -> int:
     '''
-    Computes a * (2^-32) % q
+    Computes a * (2^-32) % q. Where should I use this for optimization??
     '''
     two32 = math.pow(2,32)
     QINV = 58728449 #inverse of q mod 2^32
@@ -284,5 +297,5 @@ def get_vector_infinity_norm(vector: np.ndarray) -> int:
     Gets the infinity norm of a vector, which uses symmetric modulo representation
     (-Q_MODULUS/2 < inf_norm < Q_MODULUS/2) 
     '''
-    max_val = vector.max()
-    return mod_pm(max_val, Q_MODULUS)
+    modded_vector = mod_pm_vector(vector, Q_MODULUS)
+    return np.max(modded_vector)
