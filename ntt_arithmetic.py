@@ -1,8 +1,6 @@
 import numpy as np
-import warnings
 from parametres import *
 
-warnings.simplefilter("error")  # Convert warnings to exceptions
 
 def add_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     '''

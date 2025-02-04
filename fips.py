@@ -512,11 +512,36 @@ def ml_dsa_verify(pk: bitarray, m: bitarray, sigma: bitarray, ctx: bitarray) -> 
 
     m_prime = integer_to_bits(0, 8) + integer_to_bits(ctx.nbytes, 8) + ctx + m
     return ml_dsa_verify_internal(pk, m_prime, sigma)
+import os
 
-for i in range(20):
+import itertools
+
+def generate_lattice_points(a, v_range=1):
+    '''
+    Expects array a (KxlX256 matrix)
+    '''
+    #a_flat = a.reshape(16, 256) #TODO: add kl!
+    a_flat = a.reshape(4, 1024)
+    V = np.array(list(itertools.product([-1, 0, 1], repeat=4)))
+
+    lattice_points = (V @ a_flat) % Q_MODULUS
+    return lattice_points
+
+
+
+from sklearn.decomposition import PCA
+from dash import Dash, html, dcc, callback, Output, Input
+import plotly.express as px
+import pandas as pd
+from dash import dcc
+import plotly.graph_objs as go
+from dash import Dash, html, dcc
+import plotly.graph_objs as go
+
+def get_figure():
     pk, sk = ml_dsa_key_gen()
 
-    ctx_b = b""
+    ctx_b = os.urandom(255)
     ctx = new_bitarray()
     ctx.frombytes(ctx_b)
 
@@ -526,10 +551,60 @@ for i in range(20):
 
     sigma = ml_dsa_sign(sk, m_b, ctx) 
 
-    #TODO: verify all L_MATRIX AND K_MATRIX ITERATIONS TO WORK W/ OTHER
-    #SECURITY SETTINGS
 
-    #verified only works ~70% of time. Verify this!!
     verified = ml_dsa_verify(pk, m_b, sigma, ctx)
     print(verified)
 
+    rho, t1 = pkDecode(pk)
+    a = expand_a(rho)
+    c_hash, z, h = sigDecode(sigma)
+
+    lattice_points = generate_lattice_points(a)
+
+    z_flat = z.reshape(1, 1024)
+    zf_s = z_flat[:,0:3]
+    origin = np.array([0,0,0])
+    lattice_points += z_flat
+    
+    # Step 2: Apply PCA to reduce 256D -> 3D
+    pca = PCA(n_components=3)
+    #lattice_3d = pca.fit_transform(lattice_points)  # Shape: (10000, 3)
+    #df_z = np.vstack((lattice_3d[-1], origin))
+    df_z = np.vstack((zf_s, origin))
+    #lattice_3d = lattice_3d[:-1]
+    lattice_3d = lattice_points[:,0:3]
+
+
+    #df_z = np.add([0,0,0])
+
+    df1 = pd.DataFrame(lattice_3d, columns=['X', 'Y', 'Z'])
+    df1['Type'] = 'Lattice Point'
+    df2 = pd.DataFrame(df_z, columns=['X', 'Y', 'Z'])
+    df2['Type'] = 'Signature'
+    df = pd.concat([df1, df2], ignore_index=True)
+
+
+    # Create 3D scatter plot
+    fig = px.scatter_3d(df, x='X', y='Y', z='Z', color='Type', opacity=0.2, title="3D Lattice Visualization")
+    return fig
+
+
+
+# Initialize Dash app
+app = Dash()
+# Define the layout of the app
+app.layout = html.Div([
+    html.H1(children='3D Plot Example', style={'textAlign': 'center'}),
+    html.Button('Regenerate Plot', id='regen-button', n_clicks=0, style={'margin-bottom': '10px'}),
+    dcc.Graph(id='lattice-plot', figure=get_figure(), style={'width': '100%', 'height': '100vh'})
+])
+# Define Callback to Update Graph
+@app.callback(
+    Output('lattice-plot', 'figure'),
+    Input('regen-button', 'n_clicks')
+)
+def update_plot(n_clicks):
+    """ Callback function to regenerate the figure when the button is clicked. """
+    return get_figure()  # Generates a new plot dynamically
+
+app.run(debug=True)
