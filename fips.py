@@ -516,18 +516,15 @@ import os
 
 import itertools
 
-def generate_lattice_points(a, v_range=1):
-    '''
-    Expects array a (KxlX256 matrix)
-    '''
-    #a_flat = a.reshape(16, 256) #TODO: add kl!
-    a_flat = a.reshape(4, 1024)
-    V = np.array(list(itertools.product([-1, 0, 1], repeat=4)))
+def sample_lattice_point(A: np.ndarray, num_samples: int = 1000, coeff_range: int = N_PRIVATE_KEY_RANGE) -> np.ndarray:
+    # Sample integer coefficients from a bounded Gaussian or uniform distribution
 
-    lattice_points = (V @ a_flat) % Q_MODULUS
-    return lattice_points
+    a_reshape = A.reshape(K_MATRIX, L_MATRIX * VECTOR_ARRAY_SIZE) #flatten L matrix into 1D array, K x (256L) dimensions
+    coefficients = np.random.randint(-coeff_range, coeff_range + 1, size=(num_samples, K_MATRIX))
 
+    sampled = coefficients @ a_reshape
 
+    return sampled % Q_MODULUS  # Shape: (num_samples, L, 256)
 
 from sklearn.decomposition import PCA
 from dash import Dash, html, dcc, callback, Output, Input
@@ -538,9 +535,35 @@ import plotly.graph_objs as go
 from dash import Dash, html, dcc
 import plotly.graph_objs as go
 
-def get_figure():
-    pk, sk = ml_dsa_key_gen()
+step_index = 0
+pk, sk = ml_dsa_key_gen()
 
+ctx_b = os.urandom(255)
+ctx = new_bitarray()
+ctx.frombytes(ctx_b)
+
+m = b"test message!"
+m_b = new_bitarray()
+m_b.frombytes(m)
+
+sigma = ml_dsa_sign(sk, m_b, ctx) 
+
+rho, k, tr, s1, s2, t0 = skDecode(sk)
+verified = ml_dsa_verify(pk, m_b, sigma, ctx)
+print(verified)
+
+rho, t1 = pkDecode(pk)
+a = expand_a(rho)
+c_hash, z, h = sigDecode(sigma)
+lattice_points = sample_lattice_point(a)
+z_flat = z.reshape(1, 1024)
+s1_flat = s1.reshape(1,1024)
+origin = np.array([0,0,0])
+
+def regen_plot():
+    global lattice_points, z_flat, s1
+    pk, sk = ml_dsa_key_gen()
+    rho, k, tr, s1, s2, t0 = skDecode(sk)
     ctx_b = os.urandom(255)
     ctx = new_bitarray()
     ctx.frombytes(ctx_b)
@@ -558,29 +581,35 @@ def get_figure():
     rho, t1 = pkDecode(pk)
     a = expand_a(rho)
     c_hash, z, h = sigDecode(sigma)
-
-    lattice_points = generate_lattice_points(a)
-
+    lattice_points = sample_lattice_point(a)
     z_flat = z.reshape(1, 1024)
-    zf_s = z_flat[:,0:3]
-    origin = np.array([0,0,0])
     lattice_points += z_flat
+
+
+USE_PCA = True
+
+def get_figure():
+    global lattice_points
+
+    if USE_PCA:
+        pca = PCA(n_components=3, whiten=False, svd_solver="randomized")
+        lattice_points += z_flat
+        lattice_3d = pca.fit_transform(lattice_points) #pca all points
+        df_z = np.vstack((lattice_3d[-1], origin)) #create sig df
+        lattice_3d = lattice_3d[:-1] #remove z from main df
     
-    # Step 2: Apply PCA to reduce 256D -> 3D
-    pca = PCA(n_components=3)
-    #lattice_3d = pca.fit_transform(lattice_points)  # Shape: (10000, 3)
-    #df_z = np.vstack((lattice_3d[-1], origin))
-    df_z = np.vstack((zf_s, origin))
-    #lattice_3d = lattice_3d[:-1]
-    lattice_3d = lattice_points[:,0:3]
+    else:
+        zf_s = z_flat[:,step_index:step_index+3]
+        df_z = np.vstack((zf_s, origin))
+    
+        lattice_3d = lattice_points[:,step_index:step_index+3]
 
-
-    #df_z = np.add([0,0,0])
 
     df1 = pd.DataFrame(lattice_3d, columns=['X', 'Y', 'Z'])
     df1['Type'] = 'Lattice Point'
     df2 = pd.DataFrame(df_z, columns=['X', 'Y', 'Z'])
     df2['Type'] = 'Signature'
+
     df = pd.concat([df1, df2], ignore_index=True)
 
 
@@ -591,20 +620,33 @@ def get_figure():
 
 
 # Initialize Dash app
-app = Dash()
+app = Dash(prevent_initial_callbacks = True)
 # Define the layout of the app
 app.layout = html.Div([
     html.H1(children='3D Plot Example', style={'textAlign': 'center'}),
     html.Button('Regenerate Plot', id='regen-button', n_clicks=0, style={'margin-bottom': '10px'}),
+    dcc.Slider(0, 253, value=0,id="ind_slider"),
     dcc.Graph(id='lattice-plot', figure=get_figure(), style={'width': '100%', 'height': '100vh'})
 ])
 # Define Callback to Update Graph
 @app.callback(
-    Output('lattice-plot', 'figure'),
+    Output('lattice-plot', 'figure', allow_duplicate=True),
     Input('regen-button', 'n_clicks')
 )
 def update_plot(n_clicks):
     """ Callback function to regenerate the figure when the button is clicked. """
+    regen_plot()
     return get_figure()  # Generates a new plot dynamically
+
+@app.callback(
+    Output('lattice-plot', 'figure', allow_duplicate=True),
+    Input('ind_slider', 'value')
+)
+def update_plot(value):
+    global step_index
+    """ Callback function to regenerate the figure when the button is clicked. """
+    step_index = value
+    return get_figure()
+
 
 app.run(debug=True)
