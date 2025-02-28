@@ -516,17 +516,41 @@ import os
 
 import itertools
 
-def sample_lattice_point(A: np.ndarray, num_samples: int = 1000, coeff_range: int = N_PRIVATE_KEY_RANGE) -> np.ndarray:
+
+def center_mod_q(vec):
+    """
+    Centers a vector in the range (-Q/2, Q/2) instead of (0, Q).
+    """
+    return np.where(vec > Q_MODULUS // 2, vec - Q_MODULUS, vec)
+
+def sample_lattice_point(A: np.ndarray, S2: np.ndarray, coeff_range: int = 2) -> Tuple[np.ndarray, np.ndarray]:
     # Sample integer coefficients from a bounded Gaussian or uniform distribution
+ 
+    #a_reshape = A.reshape(K_MATRIX, L_MATRIX * VECTOR_ARRAY_SIZE) #flatten L matrix into 1D array, K x (256L) dimensions
+    coefficient_values = list(range(-coeff_range, coeff_range + 1))
+    coefficients = np.array(list(itertools.product(coefficient_values, repeat=K_MATRIX)))  # Num_combos Exhaustive combinations
 
-    a_reshape = A.reshape(K_MATRIX, L_MATRIX * VECTOR_ARRAY_SIZE) #flatten L matrix into 1D array, K x (256L) dimensions
-    coefficients = np.random.randint(-coeff_range, coeff_range + 1, size=(num_samples, K_MATRIX))
+    # Generate lattice points as integer combinations of basis vectors
+    lattice_points = np.einsum('klm,nl->nkm', A, coefficients) % Q_MODULUS
 
-    sampled = coefficients @ a_reshape
+    # Center modulo q
+    lattice_points_mod = center_mod_q(lattice_points)
 
-    return sampled % Q_MODULUS  # Shape: (num_samples, L, 256)
+    # Expand S2 for all sampled points (Num_combos, K, 256)
+    S2_expanded = np.repeat(S2[None, :, :], coefficients.shape[0], axis=0)
 
+    # Apply error
+    lattice_points_with_error = (lattice_points + S2_expanded) % Q_MODULUS
+    lattice_points_with_error_mod = center_mod_q(lattice_points_with_error)
+    
+    # Flatten from (Num_combos, K, 256) to (Num_combos, K * 256)
+    lattice_points_flat = lattice_points_mod.reshape(coefficients.shape[0], K_MATRIX * VECTOR_ARRAY_SIZE)
+    lattice_points_with_error_flat = lattice_points_with_error_mod.reshape(coefficients.shape[0], K_MATRIX * VECTOR_ARRAY_SIZE)
+
+    return lattice_points_flat, lattice_points_with_error_flat
 from sklearn.decomposition import PCA
+from scipy.spatial import distance_matrix
+from sklearn.manifold import MDS
 from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
 import pandas as pd
@@ -555,13 +579,14 @@ print(verified)
 rho, t1 = pkDecode(pk)
 a = expand_a(rho)
 c_hash, z, h = sigDecode(sigma)
-lattice_points = sample_lattice_point(a)
+lattice_points, lattice_with_s2 = sample_lattice_point(a, s2)
+
 z_flat = z.reshape(1, 1024)
 s1_flat = s1.reshape(1,1024)
 origin = np.array([0,0,0])
 
 def regen_plot():
-    global lattice_points, z_flat, s1
+    global lattice_points, z_flat, s1, lattice_with_s2
     pk, sk = ml_dsa_key_gen()
     rho, k, tr, s1, s2, t0 = skDecode(sk)
     ctx_b = os.urandom(255)
@@ -581,37 +606,60 @@ def regen_plot():
     rho, t1 = pkDecode(pk)
     a = expand_a(rho)
     c_hash, z, h = sigDecode(sigma)
-    lattice_points = sample_lattice_point(a)
-    z_flat = z.reshape(1, 1024)
-    lattice_points += z_flat
+
+    lattice_points, lattice_with_s2 = sample_lattice_point(a, s2)
+
+    zm = z.reshape(1, 1024)
+    z_flat = center_mod_q(zm)
+
+    #s2_expanded = np.tile(s2, (1, L_MATRIX))  # Expands (K x 256) → (K x (L * 256))
+    #s2_expanded = s2_expanded.reshape(K_MATRIX, L_MATRIX, VECTOR_ARRAY_SIZE)  # Broadcast to match sampled points
+    #should this involve c times the error?
+    #a_noisy = (a + s2_expanded) % Q_MODULUS  # Add error to basis vectors
+   # lattice_with_s2 = sample_lattice_point(a_noisy)
+
+    #lattice_points += z_flat
+    #s2_expanded = np.tile(s2, (num_samples, 1))
 
 
-USE_PCA = True
-
+USE_PCA = False
 def get_figure():
     global lattice_points
 
     if USE_PCA:
+        lattice_points += z_flat
+        '''
         pca = PCA(n_components=3, whiten=False, svd_solver="randomized")
         lattice_points += z_flat
         lattice_3d = pca.fit_transform(lattice_points) #pca all points
+        '''
+        len_data = 625
+        mds = MDS(n_components=3)
+        temp_inp = np.vstack((lattice_points,lattice_with_s2))
+        temp_out = mds.fit_transform(temp_inp)
+        lattice_3d = temp_out[:len_data]
+        l_error_3d = temp_out[len_data:]
+        #lattice_3d = mds.fit_transform(lattice_points)
+        #l_error_3d = mds.fit_transform(lattice_with_s2)
         df_z = np.vstack((lattice_3d[-1], origin)) #create sig df
         lattice_3d = lattice_3d[:-1] #remove z from main df
     
     else:
         zf_s = z_flat[:,step_index:step_index+3]
         df_z = np.vstack((zf_s, origin))
-    
+
         lattice_3d = lattice_points[:,step_index:step_index+3]
+        l_error_3d = lattice_with_s2[:,step_index:step_index+3]
 
-
+        
     df1 = pd.DataFrame(lattice_3d, columns=['X', 'Y', 'Z'])
     df1['Type'] = 'Lattice Point'
+    df3 = pd.DataFrame(l_error_3d, columns=['X', 'Y', 'Z'])
+    df3['Type'] = 'Error Lattice Point'
     df2 = pd.DataFrame(df_z, columns=['X', 'Y', 'Z'])
     df2['Type'] = 'Signature'
 
-    df = pd.concat([df1, df2], ignore_index=True)
-
+    df = pd.concat([df1, df2, df3], ignore_index=True)
 
     # Create 3D scatter plot
     fig = px.scatter_3d(df, x='X', y='Y', z='Z', color='Type', opacity=0.2, title="3D Lattice Visualization")
@@ -625,7 +673,7 @@ app = Dash(prevent_initial_callbacks = True)
 app.layout = html.Div([
     html.H1(children='3D Plot Example', style={'textAlign': 'center'}),
     html.Button('Regenerate Plot', id='regen-button', n_clicks=0, style={'margin-bottom': '10px'}),
-    dcc.Slider(0, 253, value=0,id="ind_slider"),
+    dcc.Slider(0, 1021, value=0,id="ind_slider"),
     dcc.Graph(id='lattice-plot', figure=get_figure(), style={'width': '100%', 'height': '100vh'})
 ])
 # Define Callback to Update Graph
