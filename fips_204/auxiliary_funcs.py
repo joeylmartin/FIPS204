@@ -3,7 +3,7 @@ from bitarray.util import ba2int, int2ba
 import numpy as np
 from typing import Tuple
 import math
-from parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND, W_MAX_HINT_ONES
+from .parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE, Q_MODULUS, N_PRIVATE_KEY_RANGE, D_DROPPED_BITS, GAMMA_2_LOW_ORDER_ROUND, W_MAX_HINT_ONES
 
 from bitarray import bitarray
 

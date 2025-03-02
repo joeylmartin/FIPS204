@@ -5,10 +5,10 @@ import pickle
 from typing import Tuple, Any
 import numpy as np
 from bitarray import bitarray, _set_default_endian
-from parametres import *
-from ntt_arithmetic import *
-from auxiliary_funcs import *
-from hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze, g_init
+from .parametres import *
+from .ntt_arithmetic import *
+from .auxiliary_funcs import *
+from .hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze, g_init
 
 #d swap = DECLARATIVE IMPLEMENTATION OF IMPERATIVE STUFF
 
@@ -18,12 +18,11 @@ from hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze
 _set_default_endian(BYTEORDER)
 
 
-def load_zeta_brv_cache(cache_file='zeta_brv_k_cache.pkl'):
+def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
     with open(cache_file, 'rb') as file:
         zeta_brv = pickle.load(file)
     return zeta_brv
 
-# Example usage
 cached_zeta_brv = load_zeta_brv_cache()
 
 
@@ -356,19 +355,6 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
     sk = skEncode(rho, k, tr, s1, s2, t0)
     return pk, sk
 
-def ml_dsa_key_gen() -> Tuple[bitarray, bitarray]:
-    '''
-    Generates a public-private key pair. 
-    '''
-    #generate 256 bit seed
-    seed = random.getrandbits(256) #change to approved RBG
-
-    if seed == None: #needed?
-        return None
-
-    temp = seed.to_bytes(32, BYTEORDER)
-    return ml_dsa_key_gen_internal(temp)
-
 def bytes_to_bitarray(temp: bytes):
     ee = new_bitarray()
     ee.frombytes(temp)
@@ -456,23 +442,6 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
     sig = sigEncode(c_hash, z_mod, h)
     return sig
 
-def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> bitarray:
-    #lmao figure out what return type is
-    
-    #context string cannot exceed 255 bytes
-    if ctx.nbytes > (255):
-        raise Exception("Context string can only be 255 bytes long!")
-
-    seed = random.getrandbits(256) #change to approved RBG
-
-    s_b = seed.to_bytes(32, BYTEORDER)
-    rnd = new_bitarray()
-    rnd.frombytes(s_b)
-
-    m_prime = integer_to_bits(0, 8) + integer_to_bits(int(len(ctx) / 8), 8) + ctx + m
-    sigma = ml_dsa_sign_internal(sk, m_prime, rnd)
-    return sigma
-
 def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool: 
     '''
     Internal function to verify a signature sigma for a message M.
@@ -502,13 +471,3 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
     c_hash_prime = h_shake256((mu + w1_encode(w1_prime)).tobytes(), 2 * LAMBDA_COLLISION_STR)
 
     return (get_vector_infinity_norm(z) < (GAMMA_1_COEFFICIENT - BETA)) and (c_hash == c_hash_prime)
-
-def ml_dsa_verify(pk: bitarray, m: bitarray, sigma: bitarray, ctx: bitarray) -> bool:
-    '''
-    Verifies signature sigma for a message M.
-    '''
-    if ctx.nbytes > (255):
-        raise Exception("Context string can only be 255 bytes long!")
-
-    m_prime = integer_to_bits(0, 8) + integer_to_bits(ctx.nbytes, 8) + ctx + m
-    return ml_dsa_verify_internal(pk, m_prime, sigma)

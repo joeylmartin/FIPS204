@@ -1,13 +1,25 @@
 
-from parametres import Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE, N_PRIVATE_KEY_RANGE
+from fips_204.parametres import Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE, N_PRIVATE_KEY_RANGE
 import numpy as np
 import itertools
 from typing import Tuple
+from abc import ABC, abstractmethod
 
 
-
-
-
+class DemoPage(ABC):
+    @abstractmethod
+    def get_html(self):
+        '''
+        Returns a Dash HTML object that represents the subpage.
+        '''
+        pass
+    @abstractmethod
+    def register_callbacks(self, app):
+        '''
+        Allows us to pass the global Dash app object to the demo page,
+        so that we can register the object's local callbacks to the global app.
+        '''
+        pass
 
 
 

@@ -1,7 +1,8 @@
-from fips import *
+from fips_204.internal_funcs import *
+from fips_204.external_funcs import * #TODO: replace these im
 import bitarray
-from vis_utils import sample_lattice_point, center_mod_q
-from parametres import *
+from .vis_utils import sample_lattice_point, center_mod_q, DemoPage
+from fips_204.parametres import *
 from enum import Enum
 from sklearn.manifold import MDS
 import pandas as pd
@@ -11,23 +12,6 @@ import os
 from dash import Dash, html, dcc, callback, Output, Input
 
 from abc import ABC, abstractmethod
-
-
-class DemoPage(ABC):
-    @abstractmethod
-    def get_html(self):
-        '''
-        Returns a Dash HTML object that represents the subpage.
-        '''
-        pass
-    @abstractmethod
-    def register_callbacks(self, app):
-        '''
-        Allows us to pass the global Dash app object to the demo page,
-        so that we can register the object's local callbacks to the global app.
-        '''
-        pass
-
 
 
 class ProjectionMethods(Enum):

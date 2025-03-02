@@ -1,5 +1,5 @@
 import numpy as np
-from parametres import *
+from .parametres import *
 
 
 def add_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:

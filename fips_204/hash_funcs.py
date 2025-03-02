@@ -5,7 +5,7 @@ from math import ceil
 from Crypto.Hash import SHAKE128, SHAKE256
 from typing import Union
 
-from auxiliary_funcs import new_bitarray
+from .auxiliary_funcs import new_bitarray
 
 HASH = Union[SHAKE128, SHAKE256]
 
