@@ -12,14 +12,14 @@ from fips_204.external_funcs import ml_dsa_key_gen
 
 # Initializ
 
-app = Dash(prevent_initial_callbacks=True, external_stylesheets=dmc.styles.ALL)
+app = Dash(prevent_initial_callbacks=True)
 
 temp = ProjectionMethods.VIEW_3D
 pk, sk = ml_dsa_key_gen()
 lat = ALattice(sk, app)
 lat.generate_3d_points(temp)
 
-arr = ArrayInsertionDemo(pk)
+arr = ArrayInsertionDemo(app, [0,1,2,3,4,5,6])
 
 
 # Define the steps in the FIPS process
@@ -58,8 +58,10 @@ app.layout = dmc.MantineProvider(
 
         # Navigation Controls
         html.Div([
-            html.Button('Previous', id='prev-button', n_clicks=0, style={'margin': '10px'}),
-            html.Button('Next', id='next-button', n_clicks=0, style={'margin': '10px'}),
+            html.Button('Previous Index', id='prev-index-button', n_clicks=0, style={'margin': '10px'}),
+            html.Button('Next Index', id='next-index=button', n_clicks=0, style={'margin': '10px'}),
+            html.Button('Previous Variable', id='prev-button', n_clicks=0, style={'margin': '10px'}),
+            html.Button('Next Variable', id='next-button', n_clicks=0, style={'margin': '10px'}),
         ], style={'textAlign': 'center'}),
 
         # Dynamic Page Content (updated by callbacks)
@@ -71,7 +73,7 @@ app.layout = dmc.MantineProvider(
 
 # Define Callback to Update Page Content
 @app.callback(
-    Output('page-content', 'children'),
+    Output('page-content', 'children', allow_duplicate=True),
     Output("register-trigger", "data"),
     Input('prev-button', 'n_clicks'),
     Input('next-button', 'n_clicks'),

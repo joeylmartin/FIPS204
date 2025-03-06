@@ -1,0 +1,1 @@
+pip install dash-mantine-components==0.12.1
