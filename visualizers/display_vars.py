@@ -25,7 +25,7 @@ class DisplayVar(ABC):
         '''
         Returns a Latex string that represents the variable value
         '''
-        pass
+        return dcc.Markdown("$A_{i,j} = f(...)$", mathjax=True)
 
     def register_callbacks(self, app):
         '''
@@ -35,6 +35,9 @@ class DisplayVar(ABC):
 
     @abstractmethod
     def get_store_id(self):
+        '''
+        Store_id used as a trigger to update the visualization
+        '''
         pass
 
 class Display2DArray(DisplayVar):
@@ -103,6 +106,7 @@ class Display2DArray(DisplayVar):
             self.selected_index = active_cell #TODO: figure out datatype of ac
             return [self.get_table(),
                       dcc.store(id=self.store_id)]
+        
         @app.callback(Output(self.div_id, "children"), Input(self.store_id, "data"))
         def update_on_index_change(data):
             return [self.get_table(),
@@ -114,6 +118,9 @@ class Display1DArray(DisplayVar):
 
         #stored as property not globally, but with data rep
         self.selected_index : int = None
+        self.table_id = name + "-table"
+        self.div_id = self.table_id + "-container"
+        self.store_id = self.table_id + "-store"
 
     def is_valid_index_update(self, change):
         if self.selected_index + change < 0:
@@ -124,8 +131,11 @@ class Display1DArray(DisplayVar):
         
         self.selected_index += change
         return 0
-
-    def get_interactive_representation(self):
+    
+    def get_store_id(self):
+        return self.store_id
+    
+    def get_table(self):
         normal_style = {
             "border": "2px solid black",
             "textAlign": "center",
@@ -147,10 +157,22 @@ class Display1DArray(DisplayVar):
 
         #TODO: add div container for scroll and labels
         return dmc.SimpleGrid(
+            id=self.table_id,
             cols=len(self.data),  
             spacing="md",
             verticalSpacing="md",
             children=grid_cells)
+
+    def get_interactive_representation(self):
+        return html.Div(
+            children=[self.get_table(),
+                      dcc.store(id=self.store_id)],
+            id=self.div_id  
+        )
     
     
-    #latex implemented in implementation
+    def register_callbacks(self, app):
+        @app.callback(Output(self.div_id, "children"), Input(self.store_id, "data"))
+        def update_on_index_change(data):
+            return [self.get_table(),
+                      dcc.store(id=self.store_id)]

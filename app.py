@@ -4,9 +4,10 @@ import pandas as pd
 from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
-
+import numpy as np
 from visualizers.lattice import ALattice, ProjectionMethods
-from visualizers.array import ArrayInsertionDemo
+#from visualizers.array import ArrayInsertionDemo
+from visualizers.variablepage import VariablesList
 from fips_204.external_funcs import ml_dsa_key_gen
 
 
@@ -19,13 +20,16 @@ pk, sk = ml_dsa_key_gen()
 lat = ALattice(sk, app)
 lat.generate_3d_points(temp)
 
-arr = ArrayInsertionDemo(app, [0,1,2,3,4,5,6])
+var1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+var2 = np.array([0,1,2,3,4,5,6,7,8,9])
 
+var_list = VariablesList(app, [var1, var2])
 
 # Define the steps in the FIPS process
 
 pages = {
-    "Array" : arr,
+    "Lattice Visualization": lat,
+    "Variables" : var_list
 }
 page_names = list(pages.keys()) #TODO: check ordering
 current_step_index = 0  # Default starting index
@@ -58,8 +62,6 @@ app.layout = dmc.MantineProvider(
 
         # Navigation Controls
         html.Div([
-            html.Button('Previous Index', id='prev-index-button', n_clicks=0, style={'margin': '10px'}),
-            html.Button('Next Index', id='next-index=button', n_clicks=0, style={'margin': '10px'}),
             html.Button('Previous Variable', id='prev-button', n_clicks=0, style={'margin': '10px'}),
             html.Button('Next Variable', id='next-button', n_clicks=0, style={'margin': '10px'}),
         ], style={'textAlign': 'center'}),
