@@ -8,7 +8,7 @@ from .display_vars import DisplayVar, Display2DArray, Display1DArray
 
 class VariablesList(DemoPage):
     def __init__(self, app, variables):
-        self.variables : Dict[str, DisplayVar] = {str(var): self.allocate_variable_display_var(var) for var in variables}
+        self.variables : Dict[str, DisplayVar] = {str(var): self.allocate_variable_display_var(var, app) for var in variables}
         self.variable_names = list(self.variables.keys())
         self.register_callbacks(app)
 
@@ -18,8 +18,9 @@ class VariablesList(DemoPage):
 
     def set_current_var(self):
         self.current_var = self.variables[self.variable_names[self.current_var_index]]
+        self.current_var.set_to_selected()
 
-    def allocate_variable_display_var(self, var) -> DisplayVar:
+    def allocate_variable_display_var(self, var, app) -> DisplayVar:
         '''
         Given a var, produce a DisplayVar object for it, 
         determined by its datatype. Used for UI.
@@ -27,9 +28,9 @@ class VariablesList(DemoPage):
         match var:
             case np.ndarray():
                 if var.ndim == 2:
-                    return Display2DArray(var, str(var))
+                    return Display2DArray(app, var, str(var))
                 elif var.ndim == 1:
-                    return Display1DArray(var, str(var))
+                    return Display1DArray(app, var, str(var))
                 else:
                     raise ValueError("Unsupported array dimension")
             case _:
@@ -85,17 +86,18 @@ class VariablesList(DemoPage):
 
             if button_id in ["prev-index-button", "next-index-button"]:
                 change = -1 if button_id == "prev-index-button" else 1
-                result = current_var.is_valid_index_update(change)
+                result = self.current_var.is_valid_index_update(change)
+                print(f"Result: {result}")
 
                 if result == 0:
                     #index update remains in var
-                    return current_var.get_interactive_representation(), current_var.get_latex_representation(), {"trigger": True}
+                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation(), {"trigger": True}
                 else:
                     if 0 <= self.current_var_index + result < len(self.variable_names):
                         self.current_var_index += result
                         self.set_current_var()
 
-                        return current_var.get_interactive_representation(), current_var.get_latex_representation(), {"trigger": True}
+                        return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation(), {"trigger": True}
 
             elif button_id in ["prev-variable-button", "next-variable-button"]:
                 change = -1 if button_id == "prev-variable-button" else 1
@@ -104,6 +106,6 @@ class VariablesList(DemoPage):
                     self.current_var_index += result
                     self.set_current_var()
 
-                    return current_var.get_interactive_representation(), current_var.get_latex_representation(), {"trigger": True}
+                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation(), {"trigger": True}
 
             return no_update, no_update, no_update

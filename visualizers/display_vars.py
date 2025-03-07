@@ -40,8 +40,15 @@ class DisplayVar(ABC):
         '''
         pass
 
+    @abstractmethod
+    def set_to_selected(self):
+        '''
+        Called by parent VariablePage. Sets the selected_index to init value
+        '''
+        pass
+
 class Display2DArray(DisplayVar):
-    def __init__(self, value, name):
+    def __init__(self, app, value, name):
         self.array = value
         self.name = name
 
@@ -49,16 +56,20 @@ class Display2DArray(DisplayVar):
         self.selected_index = [None, None]
         self.rows, self.cols = self.array.shape
 
-        self.formatted_data = {i : self.array[i] for i in range(self.rows)}
+        self.formatted_data = [  
+            {str(i): val for i, val in enumerate(row)} for row in self.array]
+
         self.table_id = name + "-table"
         self.div_id = self.table_id + "-container"
         self.store_id = self.table_id + "-store"
 
+        self.register_callbacks(app)
 
     def get_store_id(self):
         return self.store_id
     
     def is_valid_index_update(self, change):
+        print(f"Selected index: {self.selected_index}")
         if change == 1:
             if self.selected_index[1] + 1 >= self.cols:
                 if self.selected_index[0] + 1 >= self.rows:
@@ -88,31 +99,34 @@ class Display2DArray(DisplayVar):
 
     
     def get_table(self):
-        return dash_table.DataTable(self.formatted_data,
-            columns=[{'name': i, 'id': i} for i in range(self.cols)],
+        return dash_table.DataTable(data=self.formatted_data,
+            columns=[{'name': str(i), 'id': str(i)} for i in range(self.cols)],
             id=self.table_id)
+
+    def set_to_selected(self):
+        self.selected_index = [0, 0]
 
     def get_interactive_representation(self):
         return html.Div(
             children=[self.get_table(),
-                      dcc.store(id=self.store_id)],
+                      dcc.Store(id=self.store_id)],
             id=self.div_id  
         )
     
     def register_callbacks(self, app):
-        @app.callback(Output(self.div_id, 'children'),
+        @app.callback(Output(self.div_id, 'children', allow_duplicate=True),
                 Input(self.table_id, 'active_cell'))
         def update_array(active_cell):
             self.selected_index = active_cell #TODO: figure out datatype of ac
             return [self.get_table(),
-                      dcc.store(id=self.store_id)]
+                      dcc.Store(id=self.store_id)]
         
-        @app.callback(Output(self.div_id, "children"), Input(self.store_id, "data"))
+        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
         def update_on_index_change(data):
             return [self.get_table(),
-                      dcc.store(id=self.store_id)]
+                      dcc.Store(id=self.store_id)]
 class Display1DArray(DisplayVar):
-    def __init__(self, value, name):
+    def __init__(self, app, value, name):
         self.array = value
         self.name = name
 
@@ -121,6 +135,8 @@ class Display1DArray(DisplayVar):
         self.table_id = name + "-table"
         self.div_id = self.table_id + "-container"
         self.store_id = self.table_id + "-store"
+
+        self.register_callbacks(app)
 
     def is_valid_index_update(self, change):
         if self.selected_index + change < 0:
@@ -166,13 +182,16 @@ class Display1DArray(DisplayVar):
     def get_interactive_representation(self):
         return html.Div(
             children=[self.get_table(),
-                      dcc.store(id=self.store_id)],
+                      dcc.Store(id=self.store_id)],
             id=self.div_id  
         )
+    
+    def set_to_selected(self):
+        self.selected_index = 0
     
     
     def register_callbacks(self, app):
         @app.callback(Output(self.div_id, "children"), Input(self.store_id, "data"))
         def update_on_index_change(data):
             return [self.get_table(),
-                      dcc.store(id=self.store_id)]
+                      dcc.Store(id=self.store_id)]
