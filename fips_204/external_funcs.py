@@ -18,12 +18,14 @@ def ml_dsa_key_gen() -> Tuple[bitarray, bitarray]:
     return ml_dsa_key_gen_internal(temp)
 
 def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> bitarray:
-    #lmao figure out what return type is
-    
+    '''
+        rnd_override (32 byte long bitarray) argument not included in FIPS-204 scheme. 
+        Used to fix value for testing.
+    '''
     #context string cannot exceed 255 bytes
     if ctx.nbytes > (255):
         raise Exception("Context string can only be 255 bytes long!")
-
+    
     seed = random.getrandbits(256) #change to approved RBG
 
     s_b = seed.to_bytes(32, BYTEORDER)

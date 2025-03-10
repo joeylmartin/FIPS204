@@ -14,10 +14,11 @@ from fips_204.external_funcs import ml_dsa_key_gen
 # Initializ
 
 app = Dash(prevent_initial_callbacks=True)
+app.config.suppress_callback_exceptions=True
 
 temp = ProjectionMethods.VIEW_3D
 pk, sk = ml_dsa_key_gen()
-lat = ALattice(sk, app)
+lat = ALattice(pk, sk, app)
 lat.generate_3d_points(temp)
 
 var1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
@@ -37,6 +38,7 @@ page = pages[page_names[current_step_index]]
 
 # Define the layout of the app
 app.layout = dmc.MantineProvider(
+    
     theme={
         # add your colors
         "colors": {
@@ -62,8 +64,8 @@ app.layout = dmc.MantineProvider(
 
         # Navigation Controls
         html.Div([
-            html.Button('Previous Variable', id='prev-button', n_clicks=0, style={'margin': '10px'}),
-            html.Button('Next Variable', id='next-button', n_clicks=0, style={'margin': '10px'}),
+            html.Button('Previous Page', id='prev-button', n_clicks=0, style={'margin': '10px'}),
+            html.Button('Next Page', id='next-button', n_clicks=0, style={'margin': '10px'}),
         ], style={'textAlign': 'center'}),
 
         # Dynamic Page Content (updated by callbacks)

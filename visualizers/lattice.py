@@ -1,4 +1,4 @@
-from fips_204.internal_funcs import *
+import fips_204.internal_funcs
 from fips_204.external_funcs import * #TODO: replace these im
 import bitarray
 from .vis_utils import sample_lattice_point, center_mod_q, DemoPage
@@ -13,6 +13,15 @@ from dash import Dash, html, dcc, callback, Output, Input
 
 from abc import ABC, abstractmethod
 
+from fips_204.internal_funcs import signed_kappa
+#TODO add aaccess from fontened
+mb = b"Hello world!"
+m: bitarray = new_bitarray()
+m.frombytes(mb)
+
+ctx_b = os.urandom(255)
+ctx = new_bitarray()
+ctx.frombytes(ctx_b)
 
 class ProjectionMethods(Enum):
     VIEW_3D = 1
@@ -20,31 +29,85 @@ class ProjectionMethods(Enum):
 
 temp = ProjectionMethods.VIEW_3D
 
-
 class ALattice(DemoPage):
     def __str__(self):
         return "Lattice Visualization"
     
-    def __init__(self, sk, app):
+    def __init__(self,pk, sk, app):
         self.register_callbacks(app)
         self.sk = sk
-        self.rho, k, tr, s1, s2, t0 = skDecode(sk)
+        self.pk = pk
+        rho, self.k, tr, s1, s2, t0 = skDecode(sk)
 
-        a = expand_a(self.rho)
-        self.lattice_points, self.lattice_with_s2 = sample_lattice_point(a, s2)
+        self.a = expand_a(rho)
+        
+        sig = ml_dsa_sign(sk, m, ctx)
+        yes = ml_dsa_verify(pk, m, sig, ctx)
+        self.lattice_points, self.lattice_with_s2 = sample_lattice_point(self.a, s2)
 
-        self.z = self.get_signature_from_message()
+        self.get_w(pk, sk)
 
         self.origin_df : pd.DataFrame = pd.DataFrame(np.array([[0, 0, 0]]), columns=['X', 'Y', 'Z'])
 
         #This is used in the VIEW_3D projection method, sets the "dimensional slice" we use
         self.step_index = 0
+    def get_w(self, pk, sk):
+        '''
+        Gets W, W' and Z.  TODO fix selfs. .
+        '''
+        m_prime = integer_to_bits(0, 8) + integer_to_bits(int(len(ctx) / 8), 8) + ctx + m
+        
+        s_b = random.getrandbits(256).to_bytes(32, BYTEORDER)
+        rnd = new_bitarray()
+        rnd.frombytes(s_b)
+        
+        _, t1 = pkDecode(pk)
+        sigma = ml_dsa_sign_internal(sk, m_prime, rnd)
+        ch, z, h = sigDecode(sigma)
 
+        self.w = self.flatten_point(np.array(fips_204.internal_funcs.global_w))
+        self.w_a = self.flatten_point(np.array(fips_204.internal_funcs.global_w_a))
+        '''c = sample_in_ball(ch)
+
+        #Calc W', determined by C, Z, A, T1
+        d_p2 = math.pow(2, D_DROPPED_BITS)
+        w_a1 = matrix_vector_ntt(self.a, [NTT(x) for x in z])
+        w_a2 = scalar_vector_ntt(NTT(c), [NTT(d_p2 * x) for x in t1])
+        
+        w_temp_prod = add_vector_ntt(w_a1, -w_a2)
+        w_a = np.array([NTT_inv(x) for x in w_temp_prod])
+        self.w_a = self.flatten_point(w_a)
+
+        #calculate W, TODO move
+        tr = h_shake256(pk.tobytes(), 64 * 8)
+    
+        message_bytes = (tr + m_prime).tobytes()
+        mu = h_shake256(message_bytes, 64 * 8)
+        private_seed_bytes = (self.k + rnd + mu).tobytes()
+        rho_double_prime = h_shake256(private_seed_bytes, 64 * 8)
+       
+        kap = fips_204.internal_funcs.signed_kappa
+        y = expand_mask(rho_double_prime, kap)
+        w_temp_prod = matrix_vector_ntt(self.a, [NTT(x) for x in y])
+
+        w = np.array([NTT_inv(x) for x in w_temp_prod])
+
+        w1_prime = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+        for i in range(K_MATRIX):
+            for j in range(VECTOR_ARRAY_SIZE):
+                w1_prime[i][j] = use_hint(h[i][j], w_a[i][j])
+
+        self.w = self.flatten_point(w)'''
+        self.z = self.flatten_point(z)
+        
     def generate_3d_points(self, projection_method: ProjectionMethods):
         
         match projection_method:
             case ProjectionMethods.VIEW_3D:
-                df_z = self.z[:,self.step_index:self.step_index+3]
+                #df_z = self.z[:,self.step_index:self.step_index+3]
+                df_z =  np.vstack((self.z[:,self.step_index:self.step_index+3],
+                                   self.w_a[:,self.step_index:self.step_index+3],
+                                   self.w[:,self.step_index:self.step_index+3],))
                 df_l = self.lattice_points[:,self.step_index:self.step_index+3]
                 df_le = self.lattice_with_s2[:,self.step_index:self.step_index+3]
             case ProjectionMethods.MDS:
@@ -74,6 +137,13 @@ class ALattice(DemoPage):
 
         #join dfs into one
         self.df = pd.concat([df1, df2, df3, self.origin_df], ignore_index=True)
+
+    def flatten_point(self, point: np.ndarray) -> np.ndarray:
+        '''
+        Flatten point into Kx256-dimension space and modulo to q/2 space
+        '''
+        eg = point.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
+        return eg
     
     def set_step_index(self, value):
         self.step_index = value
@@ -82,29 +152,7 @@ class ALattice(DemoPage):
         # Create 3D scatter plot
         fig = px.scatter_3d(self.df, x='X', y='Y', z='Z', color='Type', opacity=0.2, title="3D Lattice Visualization")
         return fig
-
-    def get_signature_from_message(self, message="Hello world!"):
-        m_by = bytes(message, encoding='utf-8')
-        m_b = new_bitarray()
-        m_b.frombytes(m_by)
-        return self.get_z(m_b)
-
-    def get_z(self, m: bitarray):
-        '''
-        Given a message, creates a signature on the scheme, and converts it
-        to flattened array for visualization
-        '''
-        ctx_b = os.urandom(255)
-        ctx = new_bitarray()
-        ctx.frombytes(ctx_b)
-
-        sigma = ml_dsa_sign(self.sk, m, ctx) 
-        c_hash, z, h = sigDecode(sigma)
-
-        zm = z.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
-        return center_mod_q(zm) #TODO, check if reshaping is necessary? thought sig was in q/2 space
     
-
     def get_html(self):
         return html.Div([
             html.H2("Lattice Visualization"),

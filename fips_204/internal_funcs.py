@@ -18,6 +18,9 @@ from .hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeez
 _set_default_endian(BYTEORDER)
 
 
+#global value used to store Kappa value for signing;
+#this is purely for acccessing in the graphical tool later
+
 def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
     with open(cache_file, 'rb') as file:
         zeta_brv = pickle.load(file)
@@ -25,6 +28,10 @@ def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
 
 cached_zeta_brv = load_zeta_brv_cache()
 
+
+signed_kappa = 0
+global_w = None
+global_w_a = None
 
 def NTT(w: np.ndarray) -> np.ndarray:
     w_hat = w.copy() #d swap
@@ -389,8 +396,8 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
         w = [NTT_inv(x) for x in w_temp_prod]
 
         #highbits() is applied componentwise to produce w1
-        w1 = np.empty((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64') #TODO may be k matrix
-        for i in range(L_MATRIX):
+        w1 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
+        for i in range(K_MATRIX):
             for j in range(VECTOR_ARRAY_SIZE):
                 w1[i][j] = high_bits(w[i][j])
   
@@ -433,6 +440,12 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
 
         kappa += L_MATRIX
 
+    #store kappa for later access; not in FIPS standard!
+    global signed_kappa
+    signed_kappa = kappa #NOT BEING UPDATED IN GLOBAL REFERENCE
+    global global_w
+    global_w = w
+
     #vectorize this
     z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(L_MATRIX):
@@ -462,6 +475,9 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
     
     w_temp_prod = add_vector_ntt(w_a1, -w_a2)
     w_a = np.array([NTT_inv(x) for x in w_temp_prod])
+
+    global global_w_a
+    global_w_a = w_a
 
     w1_prime = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(K_MATRIX):

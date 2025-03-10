@@ -97,21 +97,143 @@ class Display2DArray(DisplayVar):
         else:
             raise ValueError("invalid index change")
 
-    
     def get_table(self):
-        return dash_table.DataTable(data=self.formatted_data,
-            columns=[{'name': str(i), 'id': str(i)} for i in range(self.cols)],
-            id=self.table_id)
+        """Generates the Dash DataTable with no header row"""
+
+        selected_style = {
+            "backgroundColor": "#ff5733",  # Highlighted cell color (orange-red like in your screenshot)
+            "color": "white",
+            "fontWeight": "bold"
+        }
+        
+        conditional_styles = []
+        if self.selected_index and None not in self.selected_index:
+            row, col = self.selected_index
+            conditional_styles.append({
+                "if": {
+                    "row_index": row,
+                    "column_id": str(col)  # Ensure column ID is a string
+                },
+                **selected_style
+            })
+
+        return dash_table.DataTable(
+            id=self.table_id,
+            data=[{str(i): val for i, val in enumerate(row)} for row in self.array],
+            columns=[{'name': '', 'id': str(i)} for i in range(self.cols)],  # No headers
+            style_data_conditional=conditional_styles,
+            style_header={"display": "none"}, 
+            css=[{"selector": "tbody tr:first-child", "rule": "height: 0px !important; display: none !important;"}],
+            style_table={"width": "100%"},
+            style_cell={
+                "textAlign": "center",
+                "padding": "0.5rem",
+                "height": "3rem",
+                "width": f"{100/self.cols}%",  # Relative width based on number of columns
+                "maxWidth": f"{100/self.cols}%"
+            },
+        )
 
     def set_to_selected(self):
         self.selected_index = [0, 0]
 
     def get_interactive_representation(self):
-        return html.Div(
-            children=[self.get_table(),
-                      dcc.Store(id=self.store_id)],
-            id=self.div_id  
+        """Creates a compactly aligned table with row/column indices"""
+        
+        # The i,j label for the top-left corner
+        corner_label = html.Div(
+            "i,j",
+            style={
+                "fontSize": "0.9em",
+                "fontWeight": "bold",
+                "textAlign": "center",
+                "width": "100%",
+                "height": "100%",
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center"
+            }
         )
+        
+        # Column indices (the j values)
+        column_indices = html.Div([
+            html.Div(
+                f"{j}",
+                style={
+                    "fontSize": "0.9em",
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                    "width": f"{100/self.cols}%",
+                    "display": "inline-block"
+                }
+            ) for j in range(self.cols)
+        ], style={"width": "100%", "display": "flex", "justifyContent": "space-around"})
+        
+        # Create the main table
+        table = self.get_table()
+        
+        # Main layout using CSS Grid for perfect alignment
+        return html.Div([
+            # Top section with grid layout
+            html.Div([
+                # Left corner with i,j label
+                html.Div(corner_label, style={
+                    "gridArea": "corner",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                }),
+                
+                # Top row with column indices
+                html.Div(column_indices, style={
+                    "gridArea": "cols",
+                    "display": "flex",
+                    "alignItems": "center"
+                })
+            ], style={
+                "display": "grid",
+                "gridTemplateAreas": "'corner cols'",
+                "gridTemplateColumns": "3rem 1fr",  # The width of the first column matches the width of row indices
+                "marginBottom": "0.5rem"
+            }),
+            
+            # Bottom section with grid layout
+            html.Div([
+                # Left column with row indices
+                html.Div([
+                    html.Div(
+                        f"{i}",
+                        style={
+                            "fontSize": "0.9em",
+                            "fontWeight": "bold",
+                            "textAlign": "center",
+                            "height": "3rem",  # Match the height of table cells
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center"
+                        }
+                    ) for i in range(self.rows)
+                ], style={
+                    "gridArea": "rows",
+                    "display": "flex",
+                    "flexDirection": "column",
+                    "justifyContent": "space-around"
+                }),
+                
+                # Main data table
+                html.Div(table, style={
+                    "gridArea": "table"
+                })
+            ], style={
+                "display": "grid",
+                "gridTemplateAreas": "'rows table'",
+                "gridTemplateColumns": "3rem 1fr"  # The width of the first column matches the width of row indices
+            }),
+            
+            # Store component for callbacks
+            dcc.Store(id=self.store_id)
+        ], id=self.div_id)
+
     
     def register_callbacks(self, app):
         @app.callback(Output(self.div_id, 'children', allow_duplicate=True),
@@ -167,14 +289,14 @@ class Display1DArray(DisplayVar):
             "fontSize": "18px"
         }
         grid_cells = [html.Div(
-                dmc.Text(self.sample_array[i]),
-                style=selected_style if i == self.current_index else normal_style)
-            for i in range(len(self.data))]
+                dmc.Text(self.array[i]),
+                style=selected_style if i == self.selected_index else normal_style)
+            for i in range(len(self.array))]
 
         #TODO: add div container for scroll and labels
         return dmc.SimpleGrid(
             id=self.table_id,
-            cols=len(self.data),  
+            cols=len(self.array),
             spacing="md",
             verticalSpacing="md",
             children=grid_cells)
