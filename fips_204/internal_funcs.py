@@ -27,28 +27,35 @@ def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
     return zeta_brv
 
 cached_zeta_brv = load_zeta_brv_cache()
+cached_zeta_inv_brv = [pow(z,-1, Q_MODULUS)for z in cached_zeta_brv]
 
 
 signed_kappa = 0
 global_w = None
 global_w_a = None
+global_t = None
+global_t1 = None
+global_s2 = None
+
+#TODO: FIGURE OUT NTT BUG!!!
+
 
 def NTT(w: np.ndarray) -> np.ndarray:
     w_hat = w.copy() #d swap
     
-    k = 0
+    m = 0
     len = 128
     while len >= 1:
         start = 0
         while start < 256:
-            k += 1
-            zeta = cached_zeta_brv[k]
+            m += 1
+            z = cached_zeta_brv[m]
             for j in range(start, start + len):
-                t = (zeta * w_hat[j + len]) % Q_MODULUS
+                t = (z * w_hat[j + len]) % Q_MODULUS
                 w_hat[j + len] = (w_hat[j] - t) % Q_MODULUS
                 w_hat[j] = (w_hat[j] + t) % Q_MODULUS
-            start += 2 * len
-        len = len // 2
+            start += (2 * len)
+        len //= 2
     return w_hat
 
 def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
@@ -60,17 +67,18 @@ def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
         start = 0
         while start < 256:
             m -= 1
-            zeta = -cached_zeta_brv[m]
+            z = cached_zeta_inv_brv[m]
             for j in range(start, start + len):
                 t = w[j]
                 w[j] = (t + w[j + len]) % Q_MODULUS
                 w[j + len] = (t - w[j + len]) % Q_MODULUS
-                w[j + len] = (zeta * w[j + len]) % Q_MODULUS
+                w[j + len] = (z * w[j + len]) % Q_MODULUS
             start += 2 * len
         len *= 2
-    f = 8347681
 
+    f = 8347681
     w = np.array([(f * j) % Q_MODULUS for j in w]) 
+
     return w
 
 def pkEncode(rho : bitarray, t1 : np.ndarray) -> bitarray:
@@ -338,17 +346,23 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
     rho = extended_seed[:256] #first 256 bits
     rho_prime = extended_seed[256:768] #middle 512 bits
     k = extended_seed[768:] #last 256 bits
-
+    
+    
     #Create Matrix A, and vectors s1 (secret) and s2 (error)
     a = expand_a(rho)
     s1, s2 = expand_s(rho_prime)
+
+
+    global global_s2#TODO: not in fips!
+    global_s2 = s2
 
     #product of A and NTT of S1
     ntt_product = matrix_vector_ntt(a, [NTT(x) for x in s1])
     t = add_vector_ntt([NTT_inv(x) for x in ntt_product], s2)
 
+    global global_t #TODO: not in fips!
+    global_t = t
 
-    #TODO: double check which uses L_MATRIX!! One of them is wrong, maybe?
     t0 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     t1 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
 
@@ -356,6 +370,9 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
     for i in range(K_MATRIX):
         for j in range(VECTOR_ARRAY_SIZE):
             t1[i][j], t0[i][j] = power_2_round(t[i][j])
+
+    global global_t1#TODO: not in fips! 
+    global_t1 = t1
 
     pk = pkEncode(rho, t1)
     tr = h_shake256(pk.tobytes(), 64 * 8)

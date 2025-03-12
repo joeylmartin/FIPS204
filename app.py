@@ -5,7 +5,7 @@ from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
-from visualizers.lattice import ALattice, ProjectionMethods
+from visualizers.lattice import ALattice, WLattice, ProjectionMethods
 #from visualizers.array import ArrayInsertionDemo
 from visualizers.variablepage import VariablesList
 from fips_204.external_funcs import ml_dsa_key_gen
@@ -18,19 +18,22 @@ app.config.suppress_callback_exceptions=True
 
 temp = ProjectionMethods.VIEW_3D
 pk, sk = ml_dsa_key_gen()
-lat = ALattice(pk, sk, app)
-lat.generate_3d_points(temp)
+lat = WLattice(pk, sk, app, "Hello world!")
 
 var1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 var2 = np.array([0,1,2,3,4,5,6,7,8,9])
 
-var_list = VariablesList(app, [var1, var2])
+var_list = VariablesList(app, [var1])
+
+
+
 
 # Define the steps in the FIPS process
 
 pages = {
-    "Lattice Visualization": lat,
-    "Variables" : var_list
+    "Variables" : var_list,
+    "Lattice Visualization": lat
+    
 }
 page_names = list(pages.keys()) #TODO: check ordering
 current_step_index = 0  # Default starting index

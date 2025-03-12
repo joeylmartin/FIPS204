@@ -1,6 +1,12 @@
 from abc import ABC, abstractmethod
 from dash import Dash, html, dcc, callback, Output, Input, State, callback_context, dash_table
 import dash_mantine_components as dmc
+import fips_204
+import math
+import plotly.graph_objects as go
+import numpy as np
+
+from fips_204.parametres import D_DROPPED_BITS, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE
 
 
 class DisplayVar(ABC):
@@ -39,7 +45,7 @@ class DisplayVar(ABC):
         Store_id used as a trigger to update the visualization
         '''
         pass
-
+  
     @abstractmethod
     def set_to_selected(self):
         '''
@@ -317,3 +323,97 @@ class Display1DArray(DisplayVar):
         def update_on_index_change(data):
             return [self.get_table(),
                       dcc.Store(id=self.store_id)]
+        
+
+class RoundingRing(DisplayVar):
+    def __init__(self, app):
+        
+
+        self.graph_id = "t" + "-graph"
+        self.div_id = self.graph_id + "-container"
+        self.store_id = self.graph_id + "-store"
+        
+        self.t = fips_204.internal_funcs.global_t.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
+        self.t1 = fips_204.internal_funcs.global_t1.reshape( K_MATRIX * VECTOR_ARRAY_SIZE)
+        self.s2 = fips_204.internal_funcs.global_s2.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
+        self.t12d = self.t1 << D_DROPPED_BITS  # T1 multiplied by 2^D
+
+
+        #gen angles and points
+        self.angles = np.linspace(0, 2 * np.pi, 300)
+        self.x_circle = np.cos(self.angles)
+        self.y_circle = np.sin(self.angles)
+
+        self.selected_index = None
+        self.register_callbacks(app)
+  
+    def get_graph(self):
+
+        #Gen Arc representing T +- error
+        arc_start = (self.t[self.selected_index] +(20 *self.s2[self.selected_index])) % Q_MODULUS
+        arc_end = (self.t[self.selected_index] - (20*self.s2[self.selected_index])) % Q_MODULUS
+        
+        
+
+        fig = go.Figure()
+    
+        # Plot the circle representing Q_MODULUS ring
+        fig.add_trace(go.Scatter(x=self.x_circle, y=self.y_circle, mode='lines', name='Ring mod Q'))
+        
+
+
+        def polar_to_cartesian(value, q):
+            angle = 2 * np.pi * (value / q)
+            return np.cos(angle), np.sin(angle)
+        
+        x_t, y_t = polar_to_cartesian(self.t[self.selected_index], Q_MODULUS)
+        x_t1, y_t1 = polar_to_cartesian(self.t12d[self.selected_index], Q_MODULUS)
+
+        x_arc, y_arc = [], []
+        for val in np.linspace(arc_start, arc_end, 30):
+            x, y = polar_to_cartesian(val, Q_MODULUS)
+            x_arc.append(x)
+            y_arc.append(y)
+        fig.add_trace(go.Scatter(x=x_arc, y=y_arc, mode='lines', name='Error band (S2)', line=dict(color='gray', width=2)))
+        
+        fig.update_layout(
+            title='Rounding with High Bits Visualization',
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            showlegend=True,
+            width=600,
+            height=600
+        )
+        fig.add_trace(go.Scatter(x=[x_t], y=[y_t], mode='markers', name='T (original)', marker=dict(size=10, color='red')))
+        fig.add_trace(go.Scatter(x=[x_t1], y=[y_t1], mode='markers', name='T1 * 2^D', marker=dict(size=10, color='blue')))
+        return fig
+
+    def register_callbacks(self, app):
+        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
+        def update_on_index_change(data):
+            return [dcc.Graph(id='rounding-graph', figure=self.get_graph()),
+                      dcc.Store(id=self.store_id)]
+
+    def is_valid_index_update(self, change):
+        if self.selected_index + change < 0 or self.selected_index + change >= (K_MATRIX * VECTOR_ARRAY_SIZE):
+            return change
+        
+        self.selected_index += change
+        return 0
+    
+    def get_latex_representation(self):
+        return super().get_latex_representation()
+
+    def get_store_id(self):
+        return self.store_id
+    
+    def set_to_selected(self):
+        self.selected_index = 0
+
+    def get_interactive_representation(self):
+        return html.Div(
+            children=[
+                dcc.Graph(id='rounding-graph', figure=self.get_graph()),
+                      dcc.Store(id=self.store_id)],
+            id=self.div_id  
+        )

@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from .vis_utils import DemoPage
 import dash_mantine_components as dmc
-from .display_vars import DisplayVar, Display2DArray, Display1DArray
+from .display_vars import DisplayVar, Display2DArray, Display1DArray, RoundingRing
 
 class VariablesList(DemoPage):
     def __init__(self, app, variables):
@@ -33,7 +33,8 @@ class VariablesList(DemoPage):
                     return Display1DArray(app, var, str(var))
                 else:
                     raise ValueError("Unsupported array dimension")
-            case _:
+            case str(): #todo allocate diff
+                return RoundingRing(app)
                 raise ValueError("Unsupported variable type")
             #case int() | float():
             #    return DisplayScalar(var, "Scalar")

@@ -29,11 +29,14 @@ def center_mod_q(vec):
     """
     return np.where(vec > Q_MODULUS // 2, vec - Q_MODULUS, vec)
 
-def sample_lattice_point(A: np.ndarray, S2: np.ndarray, coeff_range: int = N_PRIVATE_KEY_RANGE) -> Tuple[np.ndarray, np.ndarray]:
-    # Sample integer coefficients from a bounded Gaussian or uniform distribution
- 
-    #a_reshape = A.reshape(K_MATRIX, L_MATRIX * VECTOR_ARRAY_SIZE) #flatten L matrix into 1D array, K x (256L) dimensions
-    coefficient_values = list(range(-coeff_range, coeff_range + 1))
+def sample_lattice_point(A: np.ndarray, S2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Given Matrix A (representing basis vectors for a lattice), and error S2(K_MATRIX x 256), generate points on Lattice A,
+    created by all basis combinations with coefficients in the range (-N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE).
+    Returns lattice points, and points with S2 applied. Both are centered modulo Q. Returns flattened versions of these points(K_MATRIX x 256).
+    Number of lattice points generated is (2 * N_PRIVATE_KEY_RANGE + 1) ^ K_MATRIX.
+    """
+    coefficient_values = list(range(-N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE + 1))
     coefficients = np.array(list(itertools.product(coefficient_values, repeat=K_MATRIX)))  # Num_combos Exhaustive combinations
 
     # Generate lattice points as integer combinations of basis vectors
