@@ -10,7 +10,7 @@ import plotly.express as px
 import os
 import random
 
-from dash import Dash, html, dcc, callback, Output, Input
+from dash import Dash, html, dcc, callback, Output, Input, State, no_update, MATCH
 
 from abc import ABC, abstractmethod
 
@@ -28,7 +28,7 @@ class ProjectionMethods(Enum):
     VIEW_3D = 1
     MDS = 2
 
-temp = ProjectionMethods.MDS
+temp = ProjectionMethods.VIEW_3D
 
 class ALattice(DemoPage):
     def __str__(self):
@@ -158,37 +158,98 @@ class ALattice(DemoPage):
 
 class WLattice(ALattice):
     def __init__(self, pk, sk, app, m : str):
-        
 
-        #set to false, dont show Lattice until message is sent
-        self.is_showing_message = False
-        #convert message string to bits
-        mb = bytes(m, encoding='utf-8')
-        self.m: bitarray = new_bitarray()
-        self.m.frombytes(mb)
-
+    
         self.t = super().flatten_point(np.array(fips_204.internal_funcs.global_t))
         self.t1 = fips_204.internal_funcs.global_t1 
         self.cl = self.t1 * math.pow(2, D_DROPPED_BITS)
-        self.calc_vals(pk, sk)
-        
+        self.pk = pk
+        self.sk = sk
+        self.app = app
+        self.register_callbacks(self.app)
+
+    def calc_vals(self, message: bitarray):
+        '''
+        Gets W, W' and Z from pk, sk and message.
+        '''
+
+        sigm = ml_dsa_sign(self.sk, message, ctx) 
+        ch, z, h = sigDecode(sigm)
+        is_ver = ml_dsa_verify(self.pk, message, sigm, ctx)
+
+        self.w = super().flatten_point(np.array(fips_204.internal_funcs.global_w))
+        self.w_a = super().flatten_point(np.array(fips_204.internal_funcs.global_w_a))
+        self.z = super().flatten_point(z)
+
+    def sign_message_and_gen_lattice(self, message: bitarray):
+        """
+        Given a message, sign it and generate the lattice plot.
+        """
+        self.calc_vals(message)
         extra_vals = {
             "W": self.w,
             "W' approx": self.w_a,
             "Z": self.z
         }
-        super().__init__(pk, sk, app, extra_vals)
-    
-    def calc_vals(self, pk, sk):
-        '''
-        Gets W, W' and Z from pk and sk. 
-        '''
+        super().__init__(self.pk, self.sk, self.app, extra_vals)
 
-        sigm = ml_dsa_sign(sk, self.m, ctx) 
-        ch, z, h = sigDecode(sigm)
-        is_ver = ml_dsa_verify(pk, self.m, sigm, ctx)
+    def get_html(self):
+        return html.Div([
+            html.Div([
+                dcc.Input(id='message-input', type='text', placeholder='Enter message...', style={'margin-right': '10px'}),
+                html.Button('Sign', id='sign-button', n_clicks=0)
+            ], style={'margin-bottom': '10px'}),
+            
+            html.Div(id='message-status', children='(Enter message)', style={'font-style': 'italic'}),
+            
+            html.Div(id='lattice-plot-container'),
+            
+            dcc.Slider(
+                id='ind_slider',
+                min=0,
+                max=253,
+                step=3,
+                value=0,
+                marks={i: str(i) for i in range(0, 256, 3)}
+            ),
+            
+            # Store to track whether lattice was initialized
+            dcc.Store(id='lattice-ready', data={'ready': False})
+        ], style={"width": "100%", "height": "100%"})
 
-        self.w = super().flatten_point(np.array(fips_204.internal_funcs.global_w))
-        self.w_a = super().flatten_point(np.array(fips_204.internal_funcs.global_w_a))
-    
-        self.z = super().flatten_point(z)
+    def register_callbacks(self, app):
+        @app.callback(
+            Output('lattice-plot-container', 'children'),
+            Output('message-status', 'children'),
+            Output('lattice-ready', 'data'),
+            Input('sign-button', 'n_clicks'),
+            State('message-input', 'value')
+        )
+        def update_lattice(n_clicks, message):
+            if n_clicks > 0 and message:
+                mb = bytes(message, encoding='utf-8')
+                m = new_bitarray()
+                m.frombytes(mb)
+
+                self.sign_message_and_gen_lattice(m)
+
+                return (
+                    dcc.Graph(id={'type': 'lattice-plot', 'index': 0}, figure=self.get_figure()),
+                    f'Signed message: "{message}"',
+                    {'ready': True}  # Set lattice-ready flag
+                )
+            return None, '(Enter message)', {'ready': False}
+
+        @app.callback(
+            Output({'type': 'lattice-plot', 'index': MATCH}, 'figure', allow_duplicate=True),
+            Input('ind_slider', 'value'),
+            State('lattice-ready', 'data'),
+            prevent_initial_call=True  # ✅ Ensures it only triggers after the lattice is created
+        )
+        def update_plot(value, lattice_ready):
+            """ Updates the lattice figure only after it exists. """
+            if lattice_ready and lattice_ready.get('ready'):
+                self.set_step_index(value)
+                return self.get_figure()
+            return no_update
+        
