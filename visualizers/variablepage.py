@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 from dash import Dash, html, dcc, callback, Output, Input, State, callback_context, dash_table, no_update
 import numpy as np
 import plotly.graph_objects as go
@@ -8,10 +8,11 @@ from .display_vars import DisplayVar, Display2DArray, Display1DArray, RoundingRi
 
 class VariablesList(DemoPage):
     def __init__(self, app, variables):
-        self.variables : Dict[str, DisplayVar] = {str(var): self.allocate_variable_display_var(var, app) for var in variables}
+        self.variables : Dict[str, DisplayVar] = {str(var): var for var in variables}
         self.variable_names = list(self.variables.keys())
         self.register_callbacks(app)
 
+        #index for currently displayed var
         self.current_var_index = 0
         self.current_var = None
         self.set_current_var()
@@ -20,11 +21,13 @@ class VariablesList(DemoPage):
         self.current_var = self.variables[self.variable_names[self.current_var_index]]
         self.current_var.set_to_selected()
 
+
+    '''
     def allocate_variable_display_var(self, var, app) -> DisplayVar:
-        '''
-        Given a var, produce a DisplayVar object for it, 
-        determined by its datatype. Used for UI.
-        '''
+
+       # Given a var, produce a DisplayVar object for it, 
+       # determined by its datatype. Used for UI.
+
         match var:
             case np.ndarray():
                 if var.ndim == 2:
@@ -38,7 +41,8 @@ class VariablesList(DemoPage):
                 raise ValueError("Unsupported variable type")
             #case int() | float():
             #    return DisplayScalar(var, "Scalar")
-                
+    '''
+
     def get_html(self):
         return html.Div(
             children=[
@@ -60,8 +64,6 @@ class VariablesList(DemoPage):
                     html.Button('Next Variable', id='next-variable-button', n_clicks=0, style={'margin': '10px'}),
                 ], style={'textAlign': 'center', 'marginTop': '20px'}),
 
-                dcc.Store(id='index-trigger', data={}),
-                dcc.Store(id='variable-trigger', data={}),
             ]
         )
 
@@ -69,44 +71,42 @@ class VariablesList(DemoPage):
         @app.callback(
             Output("interactive-container", "children"),
             Output("latex-container", "children"),
-            Output("index-trigger", "data"),
             Input("prev-index-button", "n_clicks"),
             Input("next-index-button", "n_clicks"),
             Input("prev-variable-button", "n_clicks"),
             Input("next-variable-button", "n_clicks"),
-            prevent_initial_call=True
+            prevent_initial_call=False 
         )
         def update_display(prev_index, next_index, prev_var, next_var):
-            global current_var_index, current_var
 
             ctx = callback_context
             if not ctx.triggered:
-                return no_update, no_update, no_update
+                return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
 
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
             if button_id in ["prev-index-button", "next-index-button"]:
                 change = -1 if button_id == "prev-index-button" else 1
                 result = self.current_var.is_valid_index_update(change)
-                print(f"Result: {result}")
 
                 if result == 0:
                     #index update remains in var
-                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation(), {"trigger": True}
+                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
                 else:
+                    #change var
                     if 0 <= self.current_var_index + result < len(self.variable_names):
                         self.current_var_index += result
                         self.set_current_var()
 
-                        return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation(), {"trigger": True}
+                        return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
 
             elif button_id in ["prev-variable-button", "next-variable-button"]:
                 change = -1 if button_id == "prev-variable-button" else 1
 
                 if 0 <= self.current_var_index + change < len(self.variable_names):
-                    self.current_var_index += result
+                    self.current_var_index += change
                     self.set_current_var()
 
-                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation(), {"trigger": True}
+                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
 
-            return no_update, no_update, no_update
+            return no_update, no_update

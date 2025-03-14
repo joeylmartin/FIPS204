@@ -9,3 +9,7 @@ The FIPS-204 standard can be found [here](https://csrc.nist.gov/pubs/fips/204/fi
  - ...
 
 The Lattice visualization tool was ....
+
+
+
+TODO: FINISH README AND SETUP ENV INSTALL SCRIPT

@@ -1,12 +1,13 @@
-from dash import Dash, html, dcc, callback, Output, Input, callback_context
+from dash import Dash, html, dcc, callback, Output, Input, callback_context, no_update
 import plotly.express as px
 import pandas as pd
 from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
+from visualizers.display_vars import Display1DArray, Display2DArray
 from visualizers.lattice import ALattice, WLattice, ProjectionMethods
-#from visualizers.array import ArrayInsertionDemo
+
 from visualizers.variablepage import VariablesList
 from fips_204.external_funcs import ml_dsa_key_gen
 
@@ -20,10 +21,10 @@ temp = ProjectionMethods.VIEW_3D
 pk, sk = ml_dsa_key_gen()
 lat = WLattice(pk, sk, app, "Hello world!")
 
-var1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-var2 = np.array([0,1,2,3,4,5,6,7,8,9])
+var1 = Display2DArray(app, np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), "eee")
+var2 = Display1DArray(app, np.array([0,1,2,3,4,5,6,7,8,9]), "ee")
 
-var_list = VariablesList(app, [var1])
+var_list = VariablesList(app, [var1, var2])
 
 
 
@@ -31,8 +32,8 @@ var_list = VariablesList(app, [var1])
 # Define the steps in the FIPS process
 
 pages = {
-    "Variables" : var_list,
-    "Lattice Visualization": lat
+    "Lattice Visualization": lat,
+    "Variables" : var_list
     
 }
 page_names = list(pages.keys()) #TODO: check ordering
@@ -72,7 +73,8 @@ app.layout = dmc.MantineProvider(
         ], style={'textAlign': 'center'}),
 
         # Dynamic Page Content (updated by callbacks)
-        html.Div(id='page-content'),
+        html.Div(id='page-content', children=pages[page_names[current_step_index]].get_html()),
+
 
         dcc.Store(id='register-trigger', data={})
     ]
@@ -84,7 +86,6 @@ app.layout = dmc.MantineProvider(
     Output("register-trigger", "data"),
     Input('prev-button', 'n_clicks'),
     Input('next-button', 'n_clicks'),
-    prevent_initial_call=True
 )
 def navigate_steps(prev_clicks, next_clicks):
     global current_step_index
@@ -96,22 +97,26 @@ def navigate_steps(prev_clicks, next_clicks):
             current_step_index -= 1
         elif button_id == 'next-button' and current_step_index < len(page_names) - 1:
             current_step_index += 1
-    print("Current step index: ", current_step_index)
+
     # Get the updated page layout based on the current step
     page = pages[page_names[current_step_index]]
     page_layout = page.get_html()
+
     return page_layout, {"trigger" : True}
 
+
+#after page has rendered, register callbacks.
+#must be called after rendering, as the callbacks
+#must refer to elements that have already been rendered
 @app.callback(
     Output('register-callbacks', 'data'),
-    Input('register-trigger', 'data'),
-    prevent_initial_call=False
+    Input('register-trigger', 'data')
 )
 def register_page_callbacks(data):
     print("Registering callbacks")
     """ Registers callbacks only after page content is updated """
     page.register_callbacks(app)
-    return {}
+    return no_update
 
 if __name__ == '__main__':
     app.run(debug=True)
