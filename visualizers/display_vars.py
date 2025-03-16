@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dash import Dash, html, dcc, callback, Output, Input, State, callback_context, dash_table
+from dash import Dash, html, dcc, callback, Output, Input, State, callback_context, dash_table, no_update
 import dash_mantine_components as dmc
 import fips_204
 import math
@@ -49,7 +49,14 @@ class DisplayVar(ABC):
     @abstractmethod
     def set_to_selected(self):
         '''
-        Called by parent VariablePage. Sets the selected_index to init value
+        Called by parent VariablePage. Sets the selected_index to init value, to highlight the variable
+        '''
+        pass
+
+    @abstractmethod
+    def set_to_deselected(self):
+        '''
+        Called by parent VariablePage. Sets the selected_index to Null value
         '''
         pass
 
@@ -66,7 +73,8 @@ class Display2DArray(DisplayVar):
             {str(i): val for i, val in enumerate(row)} for row in self.array]
 
         self.table_id = name + "-table"
-        self.div_id = self.table_id + "-container"
+        self.table_container_id = self.table_id + "-container"
+        self.div_id = self.table_id + "-interactive-container"
         self.store_id = self.table_id + "-store"
 
         self.register_callbacks(app)
@@ -102,9 +110,8 @@ class Display2DArray(DisplayVar):
         
         else:
             raise ValueError("invalid index change")
-
+    
     def get_table(self):
-        """Generates the Dash DataTable with no header row"""
 
         selected_style = {
             "backgroundColor": "#ff5733",  # Highlighted cell color (orange-red like in your screenshot)
@@ -126,131 +133,103 @@ class Display2DArray(DisplayVar):
         return dash_table.DataTable(
             id=self.table_id,
             data=[{str(i): val for i, val in enumerate(row)} for row in self.array],
-            columns=[{'name': '', 'id': str(i)} for i in range(self.cols)],  # No headers
+            columns=[{'name': str(i), 'id': str(i)} for i in range(self.cols)], 
             style_data_conditional=conditional_styles,
-            style_header={"display": "none"}, 
-            css=[{"selector": "tbody tr:first-child", "rule": "height: 0px !important; display: none !important;"}],
-            style_table={"width": "100%"},
+
+            style_header={
+                "backgroundColor": "transparent",  # No shading
+                "border": "none",  # No border
+                "fontSize": "0.9em",  # Smaller text
+                "fontWeight": "bold",
+                "textAlign": "center",
+                "padding": "4px"
+            },
+
             style_cell={
                 "textAlign": "center",
                 "padding": "0.5rem",
                 "height": "3rem",
-                "width": f"{100/self.cols}%",  # Relative width based on number of columns
-                "maxWidth": f"{100/self.cols}%"
+                "width": f"{100/self.cols}%",  # Ensures proper spacing
+                "maxWidth": f"{100/self.cols}%",
+                "whiteSpace": "nowrap"  # Prevents wrapping in small cells
             },
+
+            style_table={"width": "100%", "overflowX": "auto"}
         )
 
     def set_to_selected(self):
         self.selected_index = [0, 0]
 
+    def set_to_deselected(self):
+        self.selected_index = [None, None]
+
     def get_interactive_representation(self):
-        """Creates a compactly aligned table with row/column indices"""
-        
-        # The i,j label for the top-left corner
         corner_label = html.Div(
             "i,j",
             style={
                 "fontSize": "0.9em",
                 "fontWeight": "bold",
                 "textAlign": "center",
-                "width": "100%",
-                "height": "100%",
                 "display": "flex",
                 "alignItems": "center",
-                "justifyContent": "center"
+                "justifyContent": "center",
+                "height": "100%",
             }
         )
-        
-        # Column indices (the j values)
-        column_indices = html.Div([
+
+        row_indices = html.Div([
             html.Div(
-                f"{j}",
+                str(i),
                 style={
                     "fontSize": "0.9em",
                     "fontWeight": "bold",
                     "textAlign": "center",
-                    "width": f"{100/self.cols}%",
-                    "display": "inline-block"
-                }
-            ) for j in range(self.cols)
-        ], style={"width": "100%", "display": "flex", "justifyContent": "space-around"})
-        
-        # Create the main table
-        table = self.get_table()
-        
-        # Main layout using CSS Grid for perfect alignment
-        return html.Div([
-            # Top section with grid layout
-            html.Div([
-                # Left corner with i,j label
-                html.Div(corner_label, style={
-                    "gridArea": "corner",
+                    "height": "3rem",
                     "display": "flex",
                     "alignItems": "center",
-                    "justifyContent": "center"
-                }),
-                
-                # Top row with column indices
-                html.Div(column_indices, style={
-                    "gridArea": "cols",
-                    "display": "flex",
-                    "alignItems": "center"
-                })
-            ], style={
-                "display": "grid",
-                "gridTemplateAreas": "'corner cols'",
-                "gridTemplateColumns": "3rem 1fr",  # The width of the first column matches the width of row indices
-                "marginBottom": "0.5rem"
-            }),
-            
-            # Bottom section with grid layout
-            html.Div([
-                # Left column with row indices
-                html.Div([
-                    html.Div(
-                        f"{i}",
-                        style={
-                            "fontSize": "0.9em",
-                            "fontWeight": "bold",
-                            "textAlign": "center",
-                            "height": "3rem",  # Match the height of table cells
-                            "display": "flex",
-                            "alignItems": "center",
-                            "justifyContent": "center"
-                        }
-                    ) for i in range(self.rows)
-                ], style={
-                    "gridArea": "rows",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "space-around"
-                }),
-                
-                # Main data table
-                html.Div(table, style={
-                    "gridArea": "table"
-                })
-            ], style={
-                "display": "grid",
-                "gridTemplateAreas": "'rows table'",
-                "gridTemplateColumns": "3rem 1fr"  # The width of the first column matches the width of row indices
-            }),
-            
+                    "justifyContent": "center",
+                }
+            ) for i in range(self.rows)
+        ], style={"display": "flex", "flexDirection": "column"})
+
+        table = self.get_table()
+
+        return html.Div([
+            html.Div(corner_label, style={"gridArea": "corner"}),
+            html.Div(table,id=self.table_container_id, style={"gridArea": "table"}),
+            html.Div(row_indices, style={"gridArea": "rows"}),
+
             # Store component for callbacks
             dcc.Store(id=self.store_id)
-        ], id=self.div_id)
+        ], style={
+            "display": "grid",
+            "gridTemplateAreas": """
+                'corner table'
+                'rows table'
+            """,
+            "gridTemplateColumns": "3rem 1fr",
+            "gridTemplateRows": "3rem auto",
+            "width": "100%",
+            "overflow": "auto",
+            "padding": "5px",
+            "maxHeight": "20vh",
+            "gap": "0px",
+        }, id=self.div_id)
 
     
     def register_callbacks(self, app):
-        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.table_id, 'active_cell'))
+        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True), Input(self.table_id, 'active_cell'))
         def update_array(active_cell):
+            if self.selected_index == [None, None]:
+                return no_update
+            
             self.selected_index[0] = active_cell['row']
             self.selected_index[1] = active_cell['column']
-            return [self.get_interactive_representation()]
+            return [self.get_table()]
         
-        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
+        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
         def update_on_index_change(data):
-            return [self.get_interactive_representation()]
+            return [self.get_table()]
         
 class Display1DArray(DisplayVar):
     def __init__(self, app, value, name):
@@ -258,10 +237,11 @@ class Display1DArray(DisplayVar):
         self.name = name
 
         self.cols = len(self.array)
-
+ 
         self.selected_index : int = None
         self.table_id = name + "-table"
-        self.div_id = self.table_id + "-container"
+        self.table_container_id = self.table_id + "-container"
+        self.div_id = self.table_id + "-interactive-container"  #lazy :P
         self.store_id = self.table_id + "-store"
 
         self.register_callbacks(app)
@@ -298,131 +278,84 @@ class Display1DArray(DisplayVar):
 
         return dash_table.DataTable(
             id=self.table_id,
-            data=df_d,  # ✅ Now correctly formatted as list of dictionaries
+            data=df_d, 
             columns=[{'name': str(i), 'id': str(i)} for i in range(self.cols)], 
             style_data_conditional=conditional_styles,
-            style_header={"display": "none"}, 
-            css=[{"selector": "tbody tr:first-child", "rule": "height: 0px !important; display: none !important;"}],
-            style_table={"width": "100%"},
+
+           
+            style_header={
+                "backgroundColor": "transparent",  # No shading
+                "border": "none",  # No border
+                "fontSize": "0.9em",  # Smaller text
+                "fontWeight": "bold",
+                "textAlign": "center",
+                "padding": "4px"
+            },
+
             style_cell={
                 "textAlign": "center",
                 "padding": "0.5rem",
                 "height": "3rem",
-                "width": f"{100/self.cols}%",  # Relative width
-                "maxWidth": f"{100/self.cols}%"
+                "width": f"{100/self.cols}%",  # Ensures proper spacing
+                "maxWidth": f"{100/self.cols}%",
+                "whiteSpace": "nowrap"  # Prevents wrapping in small cells
             },
+
+            style_table={"width": "100%", "overflowX": "auto"}
         )
 
     def set_to_selected(self):
         self.selected_index = 0
+    
+    def set_to_deselected(self):
+        self.selected_index = None
 
     def get_interactive_representation(self):
-        """Creates a compactly aligned table with row/column indices"""
-        
-        # The i,j label for the top-left corner
         corner_label = html.Div(
             "i",
             style={
                 "fontSize": "0.9em",
                 "fontWeight": "bold",
                 "textAlign": "center",
-                "width": "100%",
-                "height": "100%",
                 "display": "flex",
                 "alignItems": "center",
-                "justifyContent": "center"
+                "justifyContent": "center",
+                "height": "100%",
             }
         )
-        
-        # Column indices (the j values)
-        column_indices = html.Div([
-            html.Div(
-                f"{j}",
-                style={
-                    "fontSize": "0.9em",
-                    "fontWeight": "bold",
-                    "textAlign": "center",
-                    "width": f"{100/self.cols}%",
-                    "display": "inline-block"
-                }
-            ) for j in range(self.cols)
-        ], style={"width": "100%", "display": "flex", "justifyContent": "space-around"})
-        
-        # Create the main table
+
         table = self.get_table()
-        
-        # Main layout using CSS Grid for perfect alignment
+
         return html.Div([
-            # Top section with grid layout
-            html.Div([
-                # Left corner with i,j label
-                html.Div(corner_label, style={
-                    "gridArea": "corner",
-                    "display": "flex",
-                    "alignItems": "center",
-                    "justifyContent": "center"
-                }),
-                
-                # Top row with column indices
-                html.Div(column_indices, style={
-                    "gridArea": "cols",
-                    "display": "flex",
-                    "alignItems": "center"
-                })
-            ], style={
-                "display": "grid",
-                "gridTemplateAreas": "'corner cols'",
-                "gridTemplateColumns": "3rem 1fr",  # The width of the first column matches the width of row indices
-                "marginBottom": "0.5rem"
-            }),
-            
-            # Bottom section with grid layout
-            html.Div([
-                # Left column with row indices
-                html.Div([
-                    html.Div(
-                        f"{i}",
-                        style={
-                            "fontSize": "0.9em",
-                            "fontWeight": "bold",
-                            "textAlign": "center",
-                            "height": "3rem",  # Match the height of table cells
-                            "display": "flex",
-                            "alignItems": "center",
-                            "justifyContent": "center"
-                        }
-                    ) for i in range(1)
-                ], style={
-                    "gridArea": "rows",
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "justifyContent": "space-around"
-                }),
-                
-                # Main data table
-                html.Div(table, style={
-                    "gridArea": "table"
-                })
-            ], style={
-                "display": "grid",
-                "gridTemplateAreas": "'rows table'",
-                "gridTemplateColumns": "3rem 1fr"  # The width of the first column matches the width of row indices
-            }),
-            
+            html.Div(corner_label, style={"gridArea": "corner"}),
+            html.Div(table,id=self.table_container_id, style={"gridArea": "table"}),
+
             # Store component for callbacks
             dcc.Store(id=self.store_id)
-        ], id=self.div_id)
+        ], style={
+            "display": "grid",
+            "gridTemplateAreas": """
+                'corner table'
+            """,
+            "gridTemplateColumns": "3rem 1fr",
+            "width": "100%",
+            "overflow": "auto",
+            "padding": "5px",
+            "maxHeight": "20vh",
+        }, id=self.div_id)
 
-    
     def register_callbacks(self, app):
-        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.table_id, 'active_cell'))
+        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True), Input(self.table_id, 'active_cell'))
         def update_array(active_cell):
+            if self.selected_index == None:
+                return no_update
+            
             self.selected_index = active_cell['column']
-            return [self.get_interactive_representation()]
+            return [self.get_table()]
         
-        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
+        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
         def update_on_index_change(data):
-            return [self.get_interactive_representation()]
+            return [self.get_table()]
         
         
 

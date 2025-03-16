@@ -44,18 +44,54 @@ class VariablesList(DemoPage):
     '''
 
     def get_html(self):
-        return html.Div(
+        return html.Div(id="variable-page-container",
             children=[
-                dmc.Grid([
+                dmc.Grid(
+                [
+                    # Left Column: Interactive Representations
                     dmc.Col(
-                        html.Div(id="interactive-container", style={"height": "500px", "overflowY": "scroll", "border": "1px solid black", "padding": "10px"}),
-                        span=6
+                        html.Div(
+                            id="interactive-container",
+                            children=[
+                                html.Div(
+                                    var.get_interactive_representation(),
+                                    style={"margin-bottom": "20px"}  # Adds spacing between rows
+                                )
+                                for var in self.variables.values()
+                            ],
+                            style={
+                                "height": "600px",
+                                "overflowY": "scroll",
+                                "border": "1px solid black",
+                                "padding": "10px"
+                            }
+                        ),
+                        span=6  # Half-width
                     ),
+
+                    # Right Column: LaTeX Representations
                     dmc.Col(
-                        html.Div(id="latex-container", style={"height": "500px", "overflowY": "scroll", "border": "1px solid black", "padding": "10px"}),
-                        span=6
+                        html.Div(
+                            id="latex-container",
+                            children=[
+                                html.Div(
+                                    var.get_latex_representation(),
+                                    style={"margin-bottom": "20px"}  # Ensures alignment with left column
+                                )
+                                for var in self.variables.values()
+                            ],
+                            style={
+                                "height": "600px",
+                                "overflowY": "scroll",
+                                "border": "1px solid black",
+                                "padding": "10px"
+                            }
+                        ),
+                        span=6  # Half-width
                     ),
-                ], gutter="xl"),
+                ],
+                gutter="xl"
+                ),
 
                 html.Div([
                     html.Button('Previous Index', id='prev-index-button', n_clicks=0, style={'margin': '10px'}),
@@ -69,8 +105,7 @@ class VariablesList(DemoPage):
 
     def register_callbacks(self, app):
         @app.callback(
-            Output("interactive-container", "children"),
-            Output("latex-container", "children"),
+            Output("variable-page-container", "children"),
             Input("prev-index-button", "n_clicks"),
             Input("next-index-button", "n_clicks"),
             Input("prev-variable-button", "n_clicks"),
@@ -78,10 +113,10 @@ class VariablesList(DemoPage):
             prevent_initial_call=False 
         )
         def update_display(prev_index, next_index, prev_var, next_var):
-
+            #blah just update whole div instead of child element
             ctx = callback_context
             if not ctx.triggered:
-                return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
+                return no_update
 
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
@@ -91,22 +126,24 @@ class VariablesList(DemoPage):
 
                 if result == 0:
                     #index update remains in var
-                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
-                else:
-                    #change var
-                    if 0 <= self.current_var_index + result < len(self.variable_names):
-                        self.current_var_index += result
-                        self.set_current_var()
+                    return self.get_html()
+                
+                elif 0 <= self.current_var_index + result < len(self.variable_names):
+                    #index update changes var
+                    self.current_var.set_to_deselected()
+                    self.current_var_index += result
+                    self.set_current_var()
 
-                        return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
+                    return self.get_html()
 
             elif button_id in ["prev-variable-button", "next-variable-button"]:
                 change = -1 if button_id == "prev-variable-button" else 1
 
                 if 0 <= self.current_var_index + change < len(self.variable_names):
+                    self.current_var.set_to_deselected()
                     self.current_var_index += change
                     self.set_current_var()
 
-                    return self.current_var.get_interactive_representation(), self.current_var.get_latex_representation()
+                    return self.get_html()
 
-            return no_update, no_update
+            return no_update

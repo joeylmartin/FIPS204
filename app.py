@@ -21,8 +21,8 @@ temp = ProjectionMethods.VIEW_3D
 pk, sk = ml_dsa_key_gen()
 lat = WLattice(pk, sk, app, "Hello world!")
 
-var1 = Display2DArray(app, np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), "eee")
-var2 = Display1DArray(app, np.array([0,1,2,3,4,5,6,7,8,9]), "ee")
+var1 = Display1DArray(app,np.array(sk[0:25].tolist()), "eee")
+var2 = Display2DArray(app, np.array([[0,1,2],[3,4,5],[6,7,8]]), "ee")
 
 var_list = VariablesList(app, [var1, var2])
 
