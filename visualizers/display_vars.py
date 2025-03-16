@@ -26,6 +26,7 @@ class DisplayVar(ABC):
         Updates selected_index property if still selected.
         '''
         pass
+    
 
     def get_latex_representation(self):
         '''
@@ -61,7 +62,7 @@ class DisplayVar(ABC):
         pass
 
 class Display2DArray(DisplayVar):
-    def __init__(self, app, value, name):
+    def __init__(self, app, value, name, corner_label="i,j"):
         self.array = value
         self.name = name
 
@@ -76,6 +77,11 @@ class Display2DArray(DisplayVar):
         self.table_container_id = self.table_id + "-container"
         self.div_id = self.table_id + "-interactive-container"
         self.store_id = self.table_id + "-store"
+        
+        #label on interactive_representation
+        #refers to the concept of its width;
+        #i.e some are KxL matrices...
+        self.corner_label = corner_label
 
         self.register_callbacks(app)
 
@@ -165,7 +171,7 @@ class Display2DArray(DisplayVar):
 
     def get_interactive_representation(self):
         corner_label = html.Div(
-            "i,j",
+            self.corner_label,
             style={
                 "fontSize": "0.9em",
                 "fontWeight": "bold",
@@ -195,6 +201,8 @@ class Display2DArray(DisplayVar):
         table = self.get_table()
 
         return html.Div([
+            html.Div( f"{self.name}:",  style={"fontSize": "1rem", 
+                                               "fontWeight": "bold", "marginBottom": "0.5rem"}),
             html.Div(corner_label, style={"gridArea": "corner"}),
             html.Div(table,id=self.table_container_id, style={"gridArea": "table"}),
             html.Div(row_indices, style={"gridArea": "rows"}),
@@ -232,7 +240,7 @@ class Display2DArray(DisplayVar):
             return [self.get_table()]
         
 class Display1DArray(DisplayVar):
-    def __init__(self, app, value, name):
+    def __init__(self, app, value, name, corner_label="i"):
         self.array = value
         self.name = name
 
@@ -243,6 +251,9 @@ class Display1DArray(DisplayVar):
         self.table_container_id = self.table_id + "-container"
         self.div_id = self.table_id + "-interactive-container"  #lazy :P
         self.store_id = self.table_id + "-store"
+        self.latex_div_id = name + "-latex-container"
+
+        self.corner_label=corner_label
 
         self.register_callbacks(app)
 
@@ -312,7 +323,7 @@ class Display1DArray(DisplayVar):
 
     def get_interactive_representation(self):
         corner_label = html.Div(
-            "i",
+            self.corner_label,
             style={
                 "fontSize": "0.9em",
                 "fontWeight": "bold",
@@ -327,6 +338,8 @@ class Display1DArray(DisplayVar):
         table = self.get_table()
 
         return html.Div([
+            html.Div( f"{self.name}:",  style={"fontSize": "1rem", 
+                                               "fontWeight": "bold", "marginBottom": "0.5rem"}),
             html.Div(corner_label, style={"gridArea": "corner"}),
             html.Div(table,id=self.table_container_id, style={"gridArea": "table"}),
 
@@ -345,19 +358,78 @@ class Display1DArray(DisplayVar):
         }, id=self.div_id)
 
     def register_callbacks(self, app):
-        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True), Input(self.table_id, 'active_cell'))
+        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True),
+                      Output(self.latex_div_id, "children",allow_duplicate=True),
+                       Input(self.table_id, 'active_cell'))
         def update_array(active_cell):
             if self.selected_index == None:
-                return no_update
+                return no_update, no_update
             
             self.selected_index = active_cell['column']
-            return [self.get_table()]
+            return [self.get_table()], [self.get_latex_representation()]
         
-        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
+        @app.callback(Output(self.table_container_id, "children",allow_duplicate=True),
+                       Output(self.latex_div_id, "children",allow_duplicate=True),
+                       Input(self.store_id, "data"))
         def update_on_index_change(data):
-            return [self.get_table()]
+            return [self.get_table()], [self.get_latex_representation()]
         
-        
+class Display3DArray(DisplayVar):
+    def __init__(self, app, value, name):
+        self.array = value
+        self.name = name
+        self.selected_index = [None, None, None]
+        self.selected_var_index = None
+        self.subviews = self.array.shape[0]
+        #shape of subarrays
+        self.sub_rows = self.array.shape[1]
+        self.sub_cols = self.array.shape[2]
+        self.sub_displays = [Display2DArray(app, self.array[i], f"{self.name}[{i}]") for i in range(self.subviews)]
+
+    def is_valid_index_update(self, change: int):
+        change = self.sub_displays[self.selected_var_index].is_valid_index_update(change)
+        if change == 0:
+            #index still in subview
+            return 0
+        elif change == -1:
+            #index changing to previous subview
+            if self.selected_var_index <= 0:
+                return -1
+            
+            self.selected_var_index -= 1
+            self.sub_displays[self.selected_var_index].set_to_selected()
+
+            return 0
+        raise ValueError("Invalid change value!")
+        #TODO: FINISH THIS SHI
+
+    def get_interactive_representation(self):
+        subviews = []
+        for idx in range(self.subviews):
+            label = html.Div(f"{self.name}[{idx}] =", style={"fontWeight": "bold", "marginTop": "1rem"})
+            subview = self.sub_displays[idx].get_interactive_representation()
+            subviews.append(html.Div([label, subview]))
+        return html.Div(subviews, style={"display": "flex", "flexDirection": "column"})
+
+    def get_latex_representation(self):
+        return html.Div("3D array visualization not implemented.")
+
+    def register_callbacks(self, app):
+        for sub_display in self.sub_displays:
+            sub_display.register_callbacks(app)
+
+    def get_store_id(self):
+        return [sub_display.get_store_id() for sub_display in self.sub_displays]
+
+    def set_to_selected(self):
+        self.selected_index = [0, 0, 0]
+        self.sub_displays[self.selected_index[0]].set_to_selected()
+
+    def set_to_deselected(self):
+        self.selected_index = [None, None, None]
+        for sub_display in self.sub_displays:
+            sub_display.set_to_deselected()
+
 
 class RoundingRing(DisplayVar):
     def __init__(self, app):
@@ -451,3 +523,71 @@ class RoundingRing(DisplayVar):
                       dcc.Store(id=self.store_id)],
             id=self.div_id  
         )
+    
+
+
+class ADisplay(Display2DArray):
+    def __init__(self, app, value):
+        super().__init__(app, value, "𝐀")
+
+    def get_latex_representation(self):
+        if None not in self.selected_index:
+            i, j = self.selected_index
+            value = self.array[i, j]
+            latex_str = f"𝐀[{i},{j}] = \\text{{RejNTTPoly}}(\\rho + {i} + {j}) = {value}"
+        else:
+            latex_str = "𝐀[i,j] = \\text{RejNTTPoly}(\\rho + i + j)"
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("Where ρ is a randomly sampled seed, and RejNTTPoly samples a 256-order polynomial.", 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"})
+
+
+class S1Display(Display2DArray):
+    def __init__(self, app, value):
+        super().__init__(app, value, "S1", "ℓ,256")
+
+    def get_latex_representation(self):
+        if None not in self.selected_index:
+            i, j = self.selected_index
+            latex_str = f"S1[{i}] = \\text{{RejBoundedPoly}}(\\rho' + {i})"
+        else:
+            latex_str = "S1[i] = \\text{RejBoundedPoly}(\\rho' + i)"
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("Where ρ' is another randomly sampled seed, and RejBoundedPoly samples a 256-order polynomial, with a coefficients in a limited range. ", 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"})
+
+class S2Display(Display2DArray):
+    def __init__(self, app, value):
+        super().__init__(app, value, "S2", "𝑘,256")
+
+    def get_latex_representation(self):
+        if None not in self.selected_index:
+            i, j = self.selected_index
+            latex_str = f"S2[{i}] = \\text{{RejBoundedPoly}}(\\rho' + {i} + ℓ)"
+        else:
+            latex_str = "S2[i] = \\text{RejBoundedPoly}(\\rho' + i + ℓ)"
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("Where ρ' is another randomly sampled seed, and RejBoundedPoly samples a 256-order polynomial, with a coefficients in a limited range. ", 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"})
+
+class TDisplay(Display2DArray):
+    def __init__(self, app, value):
+        super().__init__(app, value, "T", "𝑘,256")
+
+    def get_latex_representation(self):
+        latex_str = "T = A∘S1 + S2"
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("TODO: WRITE THIS UP ", 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"})

@@ -5,13 +5,12 @@ from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
-from visualizers.display_vars import Display1DArray, Display2DArray
+from visualizers.display_vars import Display1DArray, Display3DArray, ADisplay
 from visualizers.lattice import ALattice, WLattice, ProjectionMethods
 
 from visualizers.variablepage import VariablesList
 from fips_204.external_funcs import ml_dsa_key_gen
-
-
+from fips_204.internal_funcs import skDecode, expand_a
 # Initializ
 
 app = Dash(prevent_initial_callbacks=True)
@@ -19,12 +18,21 @@ app.config.suppress_callback_exceptions=True
 
 temp = ProjectionMethods.VIEW_3D
 pk, sk = ml_dsa_key_gen()
+
+
+rho, k, tr, s1, s2, t0 = skDecode(sk)
+a = expand_a(rho)
+
+
 lat = WLattice(pk, sk, app, "Hello world!")
 
-var1 = Display1DArray(app,np.array(sk[0:25].tolist()), "eee")
-var2 = Display2DArray(app, np.array([[0,1,2],[3,4,5],[6,7,8]]), "ee")
+var3 = Display3DArray(app, a[:,:,:100], "fuck")
 
-var_list = VariablesList(app, [var1, var2])
+var1 = Display1DArray(app,np.array(sk[0:25].tolist()), "eee")
+
+#var2 = ADisplay(app, np.array([[0,1,2],[3,4,5],[6,7,8]]))
+
+var_list = VariablesList(app, [var1, var3])
 
 
 
