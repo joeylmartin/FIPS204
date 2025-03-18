@@ -12,6 +12,10 @@ class VariablesList(DemoPage):
         self.variable_names = list(self.variables.keys())
         self.register_callbacks(app)
 
+        #register var callbacks after they've all been inited
+        for n, val in self.variables.items():
+            val.register_callbacks(app)
+
         #index for currently displayed var
         self.current_var_index = 0
         self.current_var = None
@@ -105,7 +109,7 @@ class VariablesList(DemoPage):
 
     def register_callbacks(self, app):
         @app.callback(
-            Output("variable-page-container", "children"),
+            Output("variable-page-container", "children", allow_duplicate=True),
             Input("prev-index-button", "n_clicks"),
             Input("next-index-button", "n_clicks"),
             Input("prev-variable-button", "n_clicks"),

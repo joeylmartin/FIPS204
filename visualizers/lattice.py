@@ -34,7 +34,7 @@ class ALattice(DemoPage):
     def __str__(self):
         return "A, S1, S2 Lattice Visualization"
     
-    def __init__(self,pk, sk, app, extra_vars : dict):
+    def __init__(self,pk, sk, app, extra_vars : dict = {}):
 
         self.origin_df : pd.DataFrame = pd.DataFrame(np.array([[0, 0, 0]]), columns=['X', 'Y', 'Z'])
 
@@ -50,6 +50,8 @@ class ALattice(DemoPage):
         self.vars["Lattice from A"] = lattice_points
         self.vars["Lattice with S2"] = lattice_with_s2
 
+        #default; also way faster
+        self.projection_method : ProjectionMethods = ProjectionMethods.VIEW_3D
         #self.get_w(pk, sk)
 
         
@@ -64,14 +66,14 @@ class ALattice(DemoPage):
 
         # self.cl = self.t1 * d_p2
         self.register_callbacks(app)
+        self.df = None
 
+        self.lattice_plot_id = "w-lattice"
 
-        
-
-    def generate_3d_points(self, projection_method: ProjectionMethods):
+    def generate_3d_points(self):
         dfs = [self.origin_df]
 
-        match projection_method:
+        match self.projection_method:
             case ProjectionMethods.VIEW_3D:
 
                 for name, val in self.vars.items():
@@ -105,7 +107,7 @@ class ALattice(DemoPage):
 
 
         #join dfs into one
-        self.df = pd.concat(dfs, ignore_index=True)
+        return pd.concat(dfs, ignore_index=True)
 
     def flatten_point(self, point: np.ndarray) -> np.ndarray:
         '''
@@ -122,31 +124,49 @@ class ALattice(DemoPage):
 
     def get_figure(self):
         # Create 3D scatter plot
-        self.generate_3d_points(temp)
+        self.df = self.generate_3d_points()
         fig = px.scatter_3d(self.df, x='X', y='Y', z='Z', color='Type', opacity=0.2, title="3D Lattice Visualization")
         return fig
     
     def get_html(self):
+        
+        proj_method = dcc.RadioItems(
+                id='projection-method',
+                options=[{'label': 'View 3D', 'value': ProjectionMethods.VIEW_3D.value},
+                         {'label': 'PCoA', 'value': ProjectionMethods.MDS.value}],
+                value=self.projection_method.value,
+                labelStyle={'display': 'block'}
+            )
+
         return html.Div([
+            proj_method,
             html.Div([
-                dcc.Graph(id='lattice-plot', figure=self.get_figure())
+                dcc.Graph(id=self.lattice_plot_id, figure=self.get_figure(), style={"width": "90vw", "height": "70vh"}),
             ]),
             html.Div([
                 dcc.Slider(
                     id='ind_slider',
                     min=0,
-                    max=253,
+                    max=(VECTOR_ARRAY_SIZE * L_MATRIX - 3),
                     step=3,
                     value=0,
-                    marks={i: str(i) for i in range(0, 256, 3)}
-                )
+                    marks={i: {"label" : str(i), "style": {"fontSize":"0.5rem"}} for i in range(0, VECTOR_ARRAY_SIZE * L_MATRIX, 12)}
+                ),
             ]),
-            dcc.Store(id='register-callbacks', data={})  # Trigger for callback registration
+
         ], style={"width": "100%", "height" : "100%"})
     
     def register_callbacks(self, app):
         @app.callback(
-            Output('lattice-plot', 'figure', allow_duplicate=True),
+            Output(self.lattice_plot_id, 'figure', allow_duplicate=True),
+            Input('projection-method', 'value')
+        )
+        def update_projection(projection_method):
+            self.projection_method = ProjectionMethods(projection_method)
+            return self.get_figure()
+        
+        @app.callback(
+            Output(self.lattice_plot_id, 'figure', allow_duplicate=True),
             Input('ind_slider', 'value')
         )
         def update_plot(value):
@@ -168,6 +188,8 @@ class WLattice(ALattice):
         self.app = app
         self.register_callbacks(self.app)
 
+        self.lattice_plot_id = "w-lattice"
+        self.lattice_plot_container = self.lattice_plot_id + '-container'
     def calc_vals(self, message: bitarray):
         '''
         Gets W, W' and Z from pk, sk and message.
@@ -202,24 +224,26 @@ class WLattice(ALattice):
             
             html.Div(id='message-status', children='(Enter message)', style={'font-style': 'italic'}),
             
-            html.Div(id='lattice-plot-container'),
-            
-            dcc.Slider(
-                id='ind_slider',
-                min=0,
-                max=253,
-                step=3,
-                value=0,
-                marks={i: str(i) for i in range(0, 256, 3)}
-            ),
-            
-            # Store to track whether lattice was initialized
+            html.Div([
+                dcc.Graph(id=self.lattice_plot_id, figure=self.get_figure(), style={"width": "90vw", "height": "70vh"}),
+            ],id=self.lattice_plot_container),
+            html.Div([
+                dcc.Slider(
+                    id='ind_slider',
+                    min=0,
+                    max=(VECTOR_ARRAY_SIZE * L_MATRIX - 3),
+                    step=3,
+                    value=0,
+                    marks={i: {"label" : str(i), "style": {"fontSize":"0.5rem"}} for i in range(0, VECTOR_ARRAY_SIZE * L_MATRIX, 12)}
+                ),
+            ]),
             dcc.Store(id='lattice-ready', data={'ready': False})
-        ], style={"width": "100%", "height": "100%"})
+
+        ], style={"width": "100%", "height" : "100%"})
 
     def register_callbacks(self, app):
         @app.callback(
-            Output('lattice-plot-container', 'children'),
+            Output(self.lattice_plot_container, 'children'),
             Output('message-status', 'children'),
             Output('lattice-ready', 'data'),
             Input('sign-button', 'n_clicks'),
@@ -234,7 +258,7 @@ class WLattice(ALattice):
                 self.sign_message_and_gen_lattice(m)
 
                 return (
-                    dcc.Graph(id={'type': 'lattice-plot', 'index': 0}, figure=self.get_figure()),
+                    dcc.Graph(id=self.lattice_plot_id, figure=self.get_figure(), style={"width": "90vw", "height": "70vh"}),
                     f'Signed message: "{message}"',
                     {'ready': True}  # Set lattice-ready flag
                 )
@@ -244,7 +268,7 @@ class WLattice(ALattice):
             Output({'type': 'lattice-plot', 'index': MATCH}, 'figure', allow_duplicate=True),
             Input('ind_slider', 'value'),
             State('lattice-ready', 'data'),
-            prevent_initial_call=True  # ✅ Ensures it only triggers after the lattice is created
+            prevent_initial_call=True 
         )
         def update_plot(value, lattice_ready):
             """ Updates the lattice figure only after it exists. """
