@@ -1,3 +1,4 @@
+import random
 from dash import Dash, html, dcc, callback, Output, Input, callback_context, no_update
 import plotly.express as px
 import pandas as pd
@@ -5,19 +6,35 @@ from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
-from visualizers.display_vars import XiDisplay,ADisplay, S1Display, S2Display, TDisplay
+from fips_204.auxiliary_funcs import new_bitarray
+from fips_204.parametres import BYTEORDER
+from visualizers.display_vars import XiDisplay,ADisplay, S1Display, S2Display, TDisplay, YDisplay, RoundingRing
 from visualizers.lattice import ALattice, WLattice, ProjectionMethods
 
 from visualizers.variablepage import VariablesList
-from fips_204.external_funcs import ml_dsa_key_gen
-from fips_204.internal_funcs import skDecode, expand_a
+from fips_204.external_funcs import ml_dsa_key_gen, ml_dsa_sign, ml_dsa_verify
+from fips_204.internal_funcs import skDecode, expand_a, global_y, NTT, NTT_inv
 # Initializ
+import os
 
 app = Dash(prevent_initial_callbacks=True)
 app.config.suppress_callback_exceptions=True
 
-temp = ProjectionMethods.VIEW_3D
+
 pk, sk = ml_dsa_key_gen()
+
+ctx_b = os.urandom(255)
+ctx = new_bitarray()
+ctx.frombytes(ctx_b)
+
+seed = random.getrandbits(256) #change to approved RBG
+s_b = seed.to_bytes(32, BYTEORDER)
+mb = new_bitarray()
+mb.frombytes(s_b)
+
+sig = ml_dsa_sign(sk, mb, ctx)
+ver = ml_dsa_verify(pk, mb, sig, ctx)
+print(ver)
 
 
 rho, k, tr, s1, s2, t0 = skDecode(sk)
@@ -29,22 +46,29 @@ a = expand_a(rho)
 
 
 def page1():
+    var0 = RoundingRing()
     var1 = ADisplay( a[:,:,:20])
     var2 = S1Display(s1[:,:30])
     var3 = S2Display( s2[:,:30])
     var4 = TDisplay(s2[:,:30])
-    return VariablesList(app, [var1, var2, var3, var4])
+    return VariablesList(app, [var0, var1, var2, var3, var4])
 
 def page2():
     return ALattice(pk, sk,app)
 
+#def page3():
+#    return VariablesList(app, [YDisplay(global_y)])
 
+def page4():
+    return WLattice(pk, sk,app)
 # Define the steps in the FIPS process
 
 pages = {
     #"Page 0" : VariablesList(app, [XiDisplay]),
     "Page 1" : page1(),
-    "Page 2" : page2()
+    "Page 2" : page2(),
+  #  "Page 3" : page3(),
+    "Page 4" : page4(),
 }
 page_names = list(pages.keys()) #TODO: check ordering
 current_step_index = 0  # Default starting index

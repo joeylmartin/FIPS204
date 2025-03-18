@@ -454,57 +454,35 @@ class Display3DArray(DisplayVar):
         self.sub_displays[self.selected_var_index].set_to_deselected()
         self.selected_var_index = None
 
-
 class RoundingRing(DisplayVar):
     def __init__(self):
-        
-
         self.graph_id = "t" + "-graph"
         self.div_id = self.graph_id + "-container"
         self.store_id = self.graph_id + "-store"
+        self.slider_id = self.graph_id + "-slider"
         
-        self.t = fips_204.internal_funcs.global_t.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
-        self.t1 = fips_204.internal_funcs.global_t1.reshape( K_MATRIX * VECTOR_ARRAY_SIZE)
-        self.s2 = fips_204.internal_funcs.global_s2.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
-        self.t12d = self.t1 << D_DROPPED_BITS  # T1 multiplied by 2^D
-
-
-        #gen angles and points
+        self.t = fips_204.internal_funcs.global_w.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
+        self.t1 = fips_204.internal_funcs.global_w_a.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
+        
         self.angles = np.linspace(0, 2 * np.pi, 300)
         self.x_circle = np.cos(self.angles)
         self.y_circle = np.sin(self.angles)
 
-        self.selected_index = None
+        self.selected_index = 0
 
     def get_graph(self):
-
-        #Gen Arc representing T +- error
-        arc_start = (self.t[self.selected_index] +(20 *self.s2[self.selected_index])) % Q_MODULUS
-        arc_end = (self.t[self.selected_index] - (20*self.s2[self.selected_index])) % Q_MODULUS
-        
-        
-
         fig = go.Figure()
-    
+        
         # Plot the circle representing Q_MODULUS ring
         fig.add_trace(go.Scatter(x=self.x_circle, y=self.y_circle, mode='lines', name='Ring mod Q'))
         
-
-
         def polar_to_cartesian(value, q):
             angle = 2 * np.pi * (value / q)
             return np.cos(angle), np.sin(angle)
         
         x_t, y_t = polar_to_cartesian(self.t[self.selected_index], Q_MODULUS)
-        x_t1, y_t1 = polar_to_cartesian(self.t12d[self.selected_index], Q_MODULUS)
+        x_t1, y_t1 = polar_to_cartesian(self.t1[self.selected_index], Q_MODULUS)
 
-        x_arc, y_arc = [], []
-        for val in np.linspace(arc_start, arc_end, 30):
-            x, y = polar_to_cartesian(val, Q_MODULUS)
-            x_arc.append(x)
-            y_arc.append(y)
-        fig.add_trace(go.Scatter(x=x_arc, y=y_arc, mode='lines', name='Error band (S2)', line=dict(color='gray', width=2)))
-        
         fig.update_layout(
             title='Rounding with High Bits Visualization',
             xaxis=dict(visible=False),
@@ -517,14 +495,27 @@ class RoundingRing(DisplayVar):
         fig.add_trace(go.Scatter(x=[x_t1], y=[y_t1], mode='markers', name='T1 * 2^D', marker=dict(size=10, color='blue')))
         return fig
 
-     
     def register_callbacks(self, app):
-        @app.callback(Output(self.div_id, "children",allow_duplicate=True), Input(self.store_id, "data"))
-        def update_on_index_change(data):
-            return [dcc.Graph(id='rounding-graph', figure=self.get_graph()),
-                      dcc.Store(id=self.store_id)]
-
-
+        @app.callback(
+            [Output(self.div_id, "children", allow_duplicate=True),
+             Output(self.store_id, "data")],
+            [Input(self.store_id, "data"),
+             Input(self.slider_id, "value")]
+        )
+        def update_on_index_change(data, slider_value):
+            self.selected_index = slider_value
+            return ([dcc.Graph(id='rounding-graph', figure=self.get_graph()),
+                     dcc.Slider(
+                         id=self.slider_id,
+                         min=0,
+                         max=(K_MATRIX * VECTOR_ARRAY_SIZE) - 1,
+                         step=1,
+                         value=self.selected_index,
+                         marks={i: str(i) for i in range(0, (K_MATRIX * VECTOR_ARRAY_SIZE), max(1, (K_MATRIX * VECTOR_ARRAY_SIZE) // 10))},
+                     ),
+                     dcc.Store(id=self.store_id)],
+                    self.selected_index)
+    
     def is_valid_index_update(self, change):
         if self.selected_index + change < 0 or self.selected_index + change >= (K_MATRIX * VECTOR_ARRAY_SIZE):
             return change
@@ -541,14 +532,28 @@ class RoundingRing(DisplayVar):
     def set_to_selected(self):
         self.selected_index = 0
 
+    def set_to_deselected(self):
+        self.selected_index = None
+
     def get_interactive_representation(self):
         return html.Div(
             children=[
                 dcc.Graph(id='rounding-graph', figure=self.get_graph()),
-                      dcc.Store(id=self.store_id)],
+                dcc.Slider(
+                    id=self.slider_id,
+                    min=0,
+                    max=(K_MATRIX * VECTOR_ARRAY_SIZE) - 1,
+                    step=1,
+                    value=self.selected_index,
+                    marks={i: str(i) for i in range(0, (K_MATRIX * VECTOR_ARRAY_SIZE), max(1, (K_MATRIX * VECTOR_ARRAY_SIZE) // 10))},
+                ),
+                dcc.Store(id=self.store_id)
+            ],
             id=self.div_id  
         )
     
+
+##KEY GEN
 
 class XiDisplay(Display1DArray):
     def __init__(self, value):
@@ -640,6 +645,9 @@ class TDisplay(Display2DArray):
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
     
+
+##SIGNING
+
 class YDisplay(Display2DArray):
     def __init__(self, value):
         super().__init__(value, "Y", "ℓ,256")
@@ -657,9 +665,75 @@ class YDisplay(Display2DArray):
             dcc.Markdown(f"${latex_str}$", mathjax=True),
             html.Div("""Where μ represents a randomly generated number at the beginning of signing.
                      hash() takes data as an input, and deterministically produces an output that
-                     would be difficult to reverse. A property of hash functions is that they produce a 
-                     uniform spread: 
-                     T, alongside A are released as the public key, with S1 and S2 kept secret.
+                     would be difficult to reverse. bit_pack() takes a hashed output, and extracts
+                     coefficients for a vector in a small range -η to η (-2 to 2). A property of 
+                     hash functions is that they produce a uniform spread-- thus with the restricted
+                     coefficient range, we can expect the output to be uniformly distributed. This yields
+                     a seemingly random vector, with a short point on the lattice. This fact is important in the verification process.
+                     
+                     Variable κ is used for rejection sampling.
+
+                     We then define W as the point on the lattice (A ∘ Y).
+                     """, 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
+
+class CDisplay(Display1DArray):
+    def __init__(self, value):
+        super().__init__(value, "c", "i")
+
+    def get_latex_representation(self):
+        latex_str = "C = \\text{{SampleInBall}}(\\text{{hash(msg)}} + w)"
+
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("""Where SampleInBall produces a "mask"-- an array of coefficents with a fixed, small about of ones; the rest being 0.
+                     """, 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
+class ZDisplay(Display2DArray):
+    def __init__(self,  value):
+        super().__init__( value, "Z", "𝑘,256")
+
+    def get_latex_representation(self):
+        latex_str = "Z = y + (c \\cdot S1)"
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("""Z represents a vector equal to Y, with some of S1 added to it. 
+                     Importantly, S1 is not added to it as a point, but to its coefficients.
+                     We use rejection sampling to ensure Z's infinity norm is short. 
+                     This is because S1 biases the Y vector, and the larger Y is, the more
+                     pronounced S1 becomes over the noise. 
+
+
+                     We release C and Z as the signature, with Y kept secret.
+                     """, 
+                     style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
+        ], style={"marginTop": "1rem", "fontSize": "1.1rem"}, id=self.latex_div)
+
+##VERIFICATION
+
+
+class WADisplay(Display2DArray):
+    def __init__(self, value):
+        super().__init__(value, "W'", "𝑘,256")
+
+    def get_latex_representation(self):
+        latex_str = """w =A \\cdot Y = A\\cdot(z-c\\cdot s1)
+            w' = a\\cdot z - c\\cdot t =a\\cdot z - (A\\cdot s1 + s2)
+            = a\\cdot(z-c\\cdot s1 +c \\cdot s2)
+            [[w' ~= w]]
+            """
+
+        return html.Div([
+            dcc.Markdown(f"${latex_str}$", mathjax=True),
+            html.Div("""We can define W' as another point on the lattice, with some error added to it.
+                     Since W' is reconstructed using only public values, the signature will only be valid
+                     if the signature constructed a valid Z. Finding a short vector Z that would satisfy
+                     the above equation is reducible to the Short-Integer-Solution (SIS) problem, 
+                     which is provably hard against current quantum algorithms.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)

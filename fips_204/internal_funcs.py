@@ -27,7 +27,7 @@ def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
     return zeta_brv
 
 cached_zeta_brv = load_zeta_brv_cache()
-cached_zeta_inv_brv = [pow(z,-1, Q_MODULUS)for z in cached_zeta_brv]
+#cached_zeta_inv_brv = [-pow(z,1, Q_MODULUS)for z in cached_zeta_brv]
 
 
 signed_kappa = 0
@@ -36,6 +36,7 @@ global_w_a = None
 global_t = None
 global_t1 = None
 global_s2 = None
+global_y = None
 
 #TODO: FIGURE OUT NTT BUG!!!
 
@@ -67,7 +68,7 @@ def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
         start = 0
         while start < 256:
             m -= 1
-            z = cached_zeta_inv_brv[m]
+            z = -cached_zeta_brv[m]
             for j in range(start, start + len):
                 t = w[j]
                 w[j] = (t + w[j + len]) % Q_MODULUS
@@ -202,7 +203,6 @@ def sigDecode(sig : bitarray) -> Tuple[bitarray, np.ndarray, np.ndarray]:
         index += z_len
 
     y = sig[index : index + ((W_MAX_HINT_ONES + K_MATRIX) * 8)]
-    temp = sig[index: ]
     h = hint_bit_unpack(y)
     return c_hash, z, h
 
@@ -461,8 +461,9 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
     global signed_kappa
     signed_kappa = kappa #NOT BEING UPDATED IN GLOBAL REFERENCE
     global global_w
-    global_w = w
-
+    global_w = np.array(w)
+    global global_y
+    global_y = y
     #vectorize this
     z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(L_MATRIX):

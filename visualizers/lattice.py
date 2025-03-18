@@ -65,10 +65,11 @@ class ALattice(DemoPage):
        # d_p2 = math.pow(2, D_DROPPED_BITS)
 
         # self.cl = self.t1 * d_p2
-        self.register_callbacks(app)
         self.df = None
 
         self.lattice_plot_id = "w-lattice"
+        self.register_callbacks(app)
+        
 
     def generate_3d_points(self):
         dfs = [self.origin_df]
@@ -177,7 +178,7 @@ class ALattice(DemoPage):
 
 
 class WLattice(ALattice):
-    def __init__(self, pk, sk, app, m : str):
+    def __init__(self, pk, sk, app):
 
     
         self.t = super().flatten_point(np.array(fips_204.internal_funcs.global_t))
@@ -186,10 +187,13 @@ class WLattice(ALattice):
         self.pk = pk
         self.sk = sk
         self.app = app
-        self.register_callbacks(self.app)
 
         self.lattice_plot_id = "w-lattice"
         self.lattice_plot_container = self.lattice_plot_id + '-container'
+        
+        self.register_callbacks(self.app)
+
+        
     def calc_vals(self, message: bitarray):
         '''
         Gets W, W' and Z from pk, sk and message.
