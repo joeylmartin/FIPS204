@@ -10,6 +10,14 @@ class VariablesList(DemoPage):
     def __init__(self, app, variables):
         self.variables : Dict[str, DisplayVar] = {str(var): var for var in variables}
         self.variable_names = list(self.variables.keys())
+
+         #create hash uid to prepend div idsS
+        uid = str(hash(self))[:10]
+        self.container_div = "var-container" + uid
+        self.interactive_div = "interactive-container" + uid
+        self.latex_div = "latex-cont" + uid
+
+
         self.register_callbacks(app)
 
         #register var callbacks after they've all been inited
@@ -21,6 +29,7 @@ class VariablesList(DemoPage):
         self.current_var = None
         self.set_current_var()
 
+       
     def set_current_var(self):
         self.current_var = self.variables[self.variable_names[self.current_var_index]]
         self.current_var.set_to_selected()
@@ -48,14 +57,14 @@ class VariablesList(DemoPage):
     '''
 
     def get_html(self):
-        return html.Div(id="variable-page-container",
+        return html.Div(id=self.container_div,
             children=[
                 dmc.Grid(
                 [
                     # Left Column: Interactive Representations
                     dmc.Col(
                         html.Div(
-                            id="interactive-container",
+                            id=self.interactive_div,
                             children=[
                                 html.Div(
                                     var.get_interactive_representation(),
@@ -76,7 +85,7 @@ class VariablesList(DemoPage):
                     # Right Column: LaTeX Representations
                     dmc.Col(
                         html.Div(
-                            id="latex-container",
+                            id=self.latex_div,
                             children=[
                                 html.Div(
                                     var.get_latex_representation(),
@@ -109,15 +118,14 @@ class VariablesList(DemoPage):
 
     def register_callbacks(self, app):
         @app.callback(
-            Output("variable-page-container", "children", allow_duplicate=True),
-            Input("prev-index-button", "n_clicks"),
+            Output(self.container_div, "children"),  # Remove allow_duplicate=True
+            [Input("prev-index-button", "n_clicks"),
             Input("next-index-button", "n_clicks"),
             Input("prev-variable-button", "n_clicks"),
-            Input("next-variable-button", "n_clicks"),
-            prevent_initial_call=False 
+            Input("next-variable-button", "n_clicks")],
+            prevent_initial_call=True  # Ensure it doesn't fire on startup
         )
         def update_display(prev_index, next_index, prev_var, next_var):
-            #blah just update whole div instead of child element
             ctx = callback_context
             if not ctx.triggered:
                 return no_update
@@ -129,15 +137,12 @@ class VariablesList(DemoPage):
                 result = self.current_var.is_valid_index_update(change)
 
                 if result == 0:
-                    #index update remains in var
                     return self.get_html()
                 
                 elif 0 <= self.current_var_index + result < len(self.variable_names):
-                    #index update changes var
                     self.current_var.set_to_deselected()
                     self.current_var_index += result
                     self.set_current_var()
-
                     return self.get_html()
 
             elif button_id in ["prev-variable-button", "next-variable-button"]:
@@ -147,7 +152,6 @@ class VariablesList(DemoPage):
                     self.current_var.set_to_deselected()
                     self.current_var_index += change
                     self.set_current_var()
-
                     return self.get_html()
 
-            return no_update
+            return no_update  # Return no update if nothing changed

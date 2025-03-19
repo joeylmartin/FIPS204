@@ -5,7 +5,7 @@ import fips_204
 import math
 import plotly.graph_objects as go
 import numpy as np
-from fips_204.parametres import D_DROPPED_BITS, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE
+from fips_204.parametres import BYTEORDER, D_DROPPED_BITS, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE
 import random
 class DisplayVar(ABC):
     @abstractmethod
@@ -498,7 +498,7 @@ class RoundingRing(DisplayVar):
     def register_callbacks(self, app):
         @app.callback(
             [Output(self.div_id, "children", allow_duplicate=True),
-             Output(self.store_id, "data")],
+             Output(self.store_id, "data", allow_duplicate=True)],
             [Input(self.store_id, "data"),
              Input(self.slider_id, "value")]
         )
@@ -556,9 +556,12 @@ class RoundingRing(DisplayVar):
 ##KEY GEN
 
 class XiDisplay(Display1DArray):
-    def __init__(self, value):
+    def __init__(self):
         seed = random.getrandbits(256) 
-        super().__init__(seed, "xi", "i")
+        s_b = seed.to_bytes(32, BYTEORDER)
+        
+        s_arr = np.frombuffer(s_b, dtype=np.uint8)
+        super().__init__(s_arr, "xi", "i")
 
     def get_latex_representation(self):
         latex_str = "𝜉"

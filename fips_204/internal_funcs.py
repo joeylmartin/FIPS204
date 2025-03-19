@@ -29,16 +29,19 @@ def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
 cached_zeta_brv = load_zeta_brv_cache()
 #cached_zeta_inv_brv = [-pow(z,1, Q_MODULUS)for z in cached_zeta_brv]
 
-
+#TODO: find new approach!
 signed_kappa = 0
+
 global_w = None
 global_w_a = None
 global_t = None
 global_t1 = None
 global_s2 = None
 global_y = None
+global_c = None
+global_z = None
 
-#TODO: FIGURE OUT NTT BUG!!!
+
 
 
 def NTT(w: np.ndarray) -> np.ndarray:
@@ -464,6 +467,10 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
     global_w = np.array(w)
     global global_y
     global_y = y
+    global global_c
+    global_c = c
+    global global_z
+    global_z = z
     #vectorize this
     z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(L_MATRIX):

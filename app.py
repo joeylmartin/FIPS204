@@ -7,15 +7,18 @@ import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
 from fips_204.auxiliary_funcs import new_bitarray
-from fips_204.parametres import BYTEORDER
-from visualizers.display_vars import XiDisplay,ADisplay, S1Display, S2Display, TDisplay, YDisplay, RoundingRing
+from fips_204.parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE
+from visualizers.display_vars import WADisplay, XiDisplay,ADisplay, S1Display, S2Display, TDisplay, YDisplay, RoundingRing, CDisplay, ZDisplay
 from visualizers.lattice import ALattice, WLattice, ProjectionMethods
 
 from visualizers.variablepage import VariablesList
 from fips_204.external_funcs import ml_dsa_key_gen, ml_dsa_sign, ml_dsa_verify
-from fips_204.internal_funcs import skDecode, expand_a, global_y, NTT, NTT_inv
+from fips_204.internal_funcs import skDecode, expand_a
+import fips_204.internal_funcs as internal_funcs
 # Initializ
 import os
+
+from visualizers.vis_utils import center_mod_q
 
 app = Dash(prevent_initial_callbacks=True)
 app.config.suppress_callback_exceptions=True
@@ -43,32 +46,55 @@ a = expand_a(rho)
 
 
 
-
+def flatten_point(point: np.ndarray) -> np.ndarray:
+    '''
+    Flatten point into Kx256-dimension space and modulo to q/2 space
+    '''
+    eg = point.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
+    return center_mod_q(eg)
 
 def page1():
-    var0 = RoundingRing()
     var1 = ADisplay( a[:,:,:20])
     var2 = S1Display(s1[:,:30])
     var3 = S2Display( s2[:,:30])
     var4 = TDisplay(s2[:,:30])
-    return VariablesList(app, [var0, var1, var2, var3, var4])
+    return VariablesList(app, [var1, var2, var3, var4])
 
 def page2():
     return ALattice(pk, sk,app)
 
-#def page3():
-#    return VariablesList(app, [YDisplay(global_y)])
+def page3():
+    var0 = YDisplay(internal_funcs.global_w_a)
+    var1 = CDisplay(internal_funcs.global_c)
+    var2 = ZDisplay(internal_funcs.global_z)
+    return VariablesList(app, [var0, var1, var2])
 
 def page4():
     return WLattice(pk, sk,app)
+
+def page5():
+    var0 = WADisplay(internal_funcs.global_w_a)
+    var1 = RoundingRing()
+    return VariablesList(app, [var0, var1])
+
+def page6():
+
+    extra_vals = {
+            "W": flatten_point(np.array(internal_funcs.global_w)),
+            "W' approx": flatten_point(np.array(internal_funcs.global_w_a)),
+            "Z": flatten_point(np.array(internal_funcs.global_z)),
+        }
+    return ALattice(pk, sk, app, extra_vars=extra_vals)
 # Define the steps in the FIPS process
 
 pages = {
-    #"Page 0" : VariablesList(app, [XiDisplay]),
+    "Page 0" : VariablesList(app, [XiDisplay()]),
     "Page 1" : page1(),
     "Page 2" : page2(),
-  #  "Page 3" : page3(),
+    "Page 3" : page3(),
     "Page 4" : page4(),
+    "Page 5" : page5(),
+    "Page 6" : page6()
 }
 page_names = list(pages.keys()) #TODO: check ordering
 current_step_index = 0  # Default starting index
@@ -143,7 +169,7 @@ def navigate_steps(prev_clicks, next_clicks):
 #must be called after rendering, as the callbacks
 #must refer to elements that have already been rendered
 @app.callback(
-    Output('dummy-header', 'children'),
+    Output('dummy-header', 'children', allow_duplicate=True),
     Input('register-trigger', 'data')
 )
 def register_page_callbacks(data):

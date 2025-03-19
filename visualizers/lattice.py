@@ -37,7 +37,7 @@ class ALattice(DemoPage):
     def __init__(self,pk, sk, app, extra_vars : dict = {}):
 
         self.origin_df : pd.DataFrame = pd.DataFrame(np.array([[0, 0, 0]]), columns=['X', 'Y', 'Z'])
-
+        
         #Dict with 'Var name' -> 'Var value' (being a 1x(K * 256) array).
         #Each generates their own dataframe
         self.vars = extra_vars 
@@ -54,6 +54,8 @@ class ALattice(DemoPage):
         self.projection_method : ProjectionMethods = ProjectionMethods.VIEW_3D
         #self.get_w(pk, sk)
 
+        #div uniqueness
+        uid = str(hash(self))[:10]
         
         #This is used in the VIEW_3D projection method, sets the "dimensional slice" we use
         self.step_index = 0
@@ -67,7 +69,11 @@ class ALattice(DemoPage):
         # self.cl = self.t1 * d_p2
         self.df = None
 
-        self.lattice_plot_id = "w-lattice"
+        self.lattice_plot_id = "a-lattice"
+
+        self.ind_div = "ind_slider" + uid
+        self.proj_met = "proj_meth" + uid
+
         self.register_callbacks(app)
         
 
@@ -132,7 +138,7 @@ class ALattice(DemoPage):
     def get_html(self):
         
         proj_method = dcc.RadioItems(
-                id='projection-method',
+                id=self.proj_met,
                 options=[{'label': 'View 3D', 'value': ProjectionMethods.VIEW_3D.value},
                          {'label': 'PCoA', 'value': ProjectionMethods.MDS.value}],
                 value=self.projection_method.value,
@@ -146,7 +152,7 @@ class ALattice(DemoPage):
             ]),
             html.Div([
                 dcc.Slider(
-                    id='ind_slider',
+                    id=self.ind_div,
                     min=0,
                     max=(VECTOR_ARRAY_SIZE * L_MATRIX - 3),
                     step=3,
@@ -160,7 +166,7 @@ class ALattice(DemoPage):
     def register_callbacks(self, app):
         @app.callback(
             Output(self.lattice_plot_id, 'figure', allow_duplicate=True),
-            Input('projection-method', 'value')
+            Input(self.proj_met, 'value')
         )
         def update_projection(projection_method):
             self.projection_method = ProjectionMethods(projection_method)
@@ -168,7 +174,7 @@ class ALattice(DemoPage):
         
         @app.callback(
             Output(self.lattice_plot_id, 'figure', allow_duplicate=True),
-            Input('ind_slider', 'value')
+            Input(self.ind_div, 'value')
         )
         def update_plot(value):
             """ Callback function to regenerate the figure when the button is clicked. """
@@ -180,14 +186,14 @@ class ALattice(DemoPage):
 class WLattice(ALattice):
     def __init__(self, pk, sk, app):
 
-    
+        self.origin_df : pd.DataFrame = pd.DataFrame(np.array([[0, 0, 0]]), columns=['X', 'Y', 'Z'])
         self.t = super().flatten_point(np.array(fips_204.internal_funcs.global_t))
         self.t1 = fips_204.internal_funcs.global_t1 
         self.cl = self.t1 * math.pow(2, D_DROPPED_BITS)
         self.pk = pk
         self.sk = sk
         self.app = app
-
+        self.projection_method : ProjectionMethods = ProjectionMethods.VIEW_3D
         self.lattice_plot_id = "w-lattice"
         self.lattice_plot_container = self.lattice_plot_id + '-container'
         
@@ -214,7 +220,7 @@ class WLattice(ALattice):
         self.calc_vals(message)
         extra_vals = {
             "W": self.w,
-            "W' approx": self.w_a,
+       #     "W' approx": self.w_a,
             "Z": self.z
         }
         super().__init__(self.pk, self.sk, self.app, extra_vals)
@@ -229,11 +235,10 @@ class WLattice(ALattice):
             html.Div(id='message-status', children='(Enter message)', style={'font-style': 'italic'}),
             
             html.Div([
-                dcc.Graph(id=self.lattice_plot_id, figure=self.get_figure(), style={"width": "90vw", "height": "70vh"}),
             ],id=self.lattice_plot_container),
             html.Div([
                 dcc.Slider(
-                    id='ind_slider',
+                    id="ind-slider-lol",
                     min=0,
                     max=(VECTOR_ARRAY_SIZE * L_MATRIX - 3),
                     step=3,
@@ -247,9 +252,9 @@ class WLattice(ALattice):
 
     def register_callbacks(self, app):
         @app.callback(
-            Output(self.lattice_plot_container, 'children'),
-            Output('message-status', 'children'),
-            Output('lattice-ready', 'data'),
+            Output(self.lattice_plot_container, 'children', allow_duplicate=True),
+            Output('message-status', 'children', allow_duplicate=True),
+            Output('lattice-ready', 'data', allow_duplicate=True),
             Input('sign-button', 'n_clicks'),
             State('message-input', 'value')
         )
@@ -270,7 +275,7 @@ class WLattice(ALattice):
 
         @app.callback(
             Output({'type': 'lattice-plot', 'index': MATCH}, 'figure', allow_duplicate=True),
-            Input('ind_slider', 'value'),
+            Input("ind-slider-lol", 'value'),
             State('lattice-ready', 'data'),
             prevent_initial_call=True 
         )
@@ -281,3 +286,4 @@ class WLattice(ALattice):
                 return self.get_figure()
             return no_update
         
+4
