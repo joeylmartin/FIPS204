@@ -1,9 +1,0 @@
-pip install dash-mantine-components==0.12.1
-Dash
-plotly
-bitarray
-pickle?
-scikit-learn
-hashlib
-pip install pycryptodome
-pandas

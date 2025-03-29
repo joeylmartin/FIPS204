@@ -8,6 +8,11 @@ import numpy as np
 from fips_204.parametres import BYTEORDER, D_DROPPED_BITS, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE
 import random
 import app_calc_vals as globals
+
+
+'''
+This is an object to abstract the interface for different types of Variable Display representations (i.e 2D arrays, 3D...)
+'''
 class DisplayVar(ABC):
     @abstractmethod
     def get_interactive_representation(self):

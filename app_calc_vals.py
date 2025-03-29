@@ -1,4 +1,4 @@
-import math
+
 from fips_204.external_funcs import ml_dsa_key_gen, ml_dsa_sign, ml_dsa_verify
 from fips_204.internal_funcs import NTT, NTT_inv, pkDecode, sample_in_ball, sigDecode, skDecode, expand_a
 import fips_204.internal_funcs as internal_funcs

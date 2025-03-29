@@ -26,8 +26,9 @@ def ml_dsa_sign(sk: bitarray, m: bitarray, ctx: bitarray) -> bitarray:
     if ctx.nbytes > (255):
         raise Exception("Context string can only be 255 bytes long!")
     
-    seed = random.getrandbits(256) #change to approved RBG
+    seed = random.getrandbits(256)
 
+    #conv seed bytes obj to bitarray
     s_b = seed.to_bytes(32, BYTEORDER)
     rnd = new_bitarray()
     rnd.frombytes(s_b)

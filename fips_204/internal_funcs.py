@@ -10,10 +10,6 @@ from .ntt_arithmetic import *
 from .auxiliary_funcs import *
 from .hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze, g_init
 
-#d swap = DECLARATIVE IMPLEMENTATION OF IMPERATIVE STUFF
-
-#TODO: verify dtype of np arrays!!
-
 #byteorder is little endian
 _set_default_endian(BYTEORDER)
 
@@ -23,15 +19,13 @@ def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
     return zeta_brv
 
 cached_zeta_brv = load_zeta_brv_cache()
-#cached_zeta_inv_brv = [-pow(z,1, Q_MODULUS)for z in cached_zeta_brv]
-
-#TODO: find new approach!
-signed_kappa = 0
-
-
 
 
 def NTT(w: np.ndarray) -> np.ndarray:
+    '''
+    Converts an element of Rq into Tq with the Number
+    Theoretic Transform (NTT).
+    '''
     w_hat = w.copy() #d swap
     
     m = 0
@@ -50,6 +44,9 @@ def NTT(w: np.ndarray) -> np.ndarray:
     return w_hat
 
 def NTT_inv(w_hat: np.ndarray) -> np.ndarray:
+    '''
+    Converts an element of Tq into Rq.
+    '''
     w = w_hat.copy() #d swap
     
     m = 256
@@ -102,6 +99,9 @@ def pkDecode(pk: bitarray) -> Tuple[bitarray, np.ndarray]:
     return rho, t1
 
 def skEncode(rho : bitarray, k : bitarray, tr : bitarray, s1 : np.ndarray, s2 : np.ndarray, t0 : np.ndarray) -> bitarray:
+    '''
+    Encodes the components of a secret key into one bitarray.
+    '''
     sk = rho + k + tr
     for i in range(L_MATRIX):
         sk += bit_pack(s1[i], N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE)
@@ -360,13 +360,10 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
     sk = skEncode(rho, k, tr, s1, s2, t0)
     return pk, sk
 
-def bytes_to_bitarray(temp: bytes):
-    ee = new_bitarray()
-    ee.frombytes(temp)
-    return ee
-
-
-def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
+def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> bitarray:
+    '''
+    Internal function to sign a message, given sk, message, and a random seed rnd.
+    '''
     rho, k, tr, s1, s2, t0 = skDecode(sk)
 
     s1_hat = [ NTT(s) for s in s1]
@@ -438,7 +435,7 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
 
         kappa += L_MATRIX
 
-    #vectorize this
+    #potential to np vectorize this for better performance?
     z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(L_MATRIX):
         for j in range(VECTOR_ARRAY_SIZE):
@@ -462,10 +459,11 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
     c = sample_in_ball(c_hash)
     
     d_p2 = math.pow(2, D_DROPPED_BITS)
+
     w_a1 = matrix_vector_ntt(a, [NTT(x) for x in z])
     w_a2 = scalar_vector_ntt(NTT(c), [NTT(d_p2 * x) for x in t1])
-    
     w_temp_prod = add_vector_ntt(w_a1, -w_a2)
+
     w_a = np.array([NTT_inv(x) for x in w_temp_prod])
 
     w1_prime = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')

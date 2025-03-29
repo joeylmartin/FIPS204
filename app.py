@@ -1,4 +1,4 @@
-import random
+
 from dash import Dash, html, dcc, callback, Output, Input, callback_context, no_update
 import plotly.express as px
 import pandas as pd
@@ -12,7 +12,7 @@ from visualizers.lattice import ALattice, WLattice, ProjectionMethods
 
 from visualizers.variablepage import VariablesList
 from fips_204.parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE
-# Initializ
+
 import app_calc_vals as globals
 
 from visualizers.vis_utils import center_mod_q
@@ -32,11 +32,12 @@ def flatten_point(point: np.ndarray) -> np.ndarray:
     return center_mod_q(eg)
 
 def page1():
+    var0 = XiDisplay()
     var1 = ADisplay(globals.a[:,:,:20])
     var2 = S1Display(globals.s1[:,:30])
     var3 = S2Display(globals.s2[:,:30])
-    var4 = TDisplay(globals.s2[:,:30])
-    return VariablesList(app, [var1, var2, var3, var4])
+    var4 = TDisplay(globals.t[:,:30])
+    return VariablesList(app, [var0, var1, var2, var3, var4])
 
 def page2():
     return ALattice(app)
@@ -65,7 +66,6 @@ def page6():
 # Define the steps in the FIPS process
 
 pages = {
-    #"Page 0" : VariablesList(app, [XiDisplay()]),
     "Page 1" : page1(),
     "Page 2" : page2(),
     "Page 3" : page3(),
@@ -120,7 +120,7 @@ app.layout = dmc.MantineProvider(
 # Define Callback to Update Page Content
 @app.callback(
     Output('page-content', 'children', allow_duplicate=True),
-    Output("register-trigger", "data"),
+    Output("register-trigger", "data", allow_duplicate=True),
     Input('prev-button', 'n_clicks'),
     Input('next-button', 'n_clicks'),
 )

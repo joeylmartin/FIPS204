@@ -118,7 +118,7 @@ class VariablesList(DemoPage):
 
     def register_callbacks(self, app):
         @app.callback(
-            Output(self.container_div, "children"),  # Remove allow_duplicate=True
+            Output(self.container_div, "children", allow_duplicate=True),  
             [Input("prev-index-button", "n_clicks"),
             Input("next-index-button", "n_clicks"),
             Input("prev-variable-button", "n_clicks"),
