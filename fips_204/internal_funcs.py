@@ -17,10 +17,6 @@ from .hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeez
 #byteorder is little endian
 _set_default_endian(BYTEORDER)
 
-
-#global value used to store Kappa value for signing;
-#this is purely for acccessing in the graphical tool later
-
 def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
     with open(cache_file, 'rb') as file:
         zeta_brv = pickle.load(file)
@@ -31,15 +27,6 @@ cached_zeta_brv = load_zeta_brv_cache()
 
 #TODO: find new approach!
 signed_kappa = 0
-
-global_w = None
-global_w_a = None
-global_t = None
-global_t1 = None
-global_s2 = None
-global_y = None
-global_c = None
-global_z = None
 
 
 
@@ -355,16 +342,10 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
     a = expand_a(rho)
     s1, s2 = expand_s(rho_prime)
 
-
-    global global_s2#TODO: not in fips!
-    global_s2 = s2
-
     #product of A and NTT of S1
     ntt_product = matrix_vector_ntt(a, [NTT(x) for x in s1])
-    t = add_vector_ntt([NTT_inv(x) for x in ntt_product], s2)
+    t = [NTT_inv(x) for x in ntt_product] +  s2
 
-    global global_t #TODO: not in fips!
-    global_t = t
 
     t0 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     t1 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
@@ -373,9 +354,6 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
     for i in range(K_MATRIX):
         for j in range(VECTOR_ARRAY_SIZE):
             t1[i][j], t0[i][j] = power_2_round(t[i][j])
-
-    global global_t1#TODO: not in fips! 
-    global_t1 = t1
 
     pk = pkEncode(rho, t1)
     tr = h_shake256(pk.tobytes(), 64 * 8)
@@ -429,11 +407,11 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
 
         cs1_prod = scalar_vector_ntt(c_hat, s1_hat) 
         cs1 = np.array([NTT_inv(sub) for sub in cs1_prod])
-
+    
         cs2_prod = scalar_vector_ntt(c_hat, s2_hat)
         cs2 = np.array([NTT_inv(sub) for sub in cs2_prod])
 
-        z = add_vector_ntt(y, cs1)
+        z = y + cs1
         
         r0 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
         for i in range(K_MATRIX):
@@ -460,17 +438,6 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> Any:
 
         kappa += L_MATRIX
 
-    #store kappa for later access; not in FIPS standard!
-    global signed_kappa
-    signed_kappa = kappa #NOT BEING UPDATED IN GLOBAL REFERENCE
-    global global_w
-    global_w = np.array(w)
-    global global_y
-    global_y = y
-    global global_c
-    global_c = c
-    global global_z
-    global_z = z
     #vectorize this
     z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(L_MATRIX):
@@ -500,9 +467,6 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
     
     w_temp_prod = add_vector_ntt(w_a1, -w_a2)
     w_a = np.array([NTT_inv(x) for x in w_temp_prod])
-
-    global global_w_a
-    global_w_a = w_a
 
     w1_prime = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
     for i in range(K_MATRIX):

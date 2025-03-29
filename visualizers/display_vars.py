@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import numpy as np
 from fips_204.parametres import BYTEORDER, D_DROPPED_BITS, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE
 import random
+import app_calc_vals as globals
 class DisplayVar(ABC):
     @abstractmethod
     def get_interactive_representation(self):
@@ -461,8 +462,8 @@ class RoundingRing(DisplayVar):
         self.store_id = self.graph_id + "-store"
         self.slider_id = self.graph_id + "-slider"
         
-        self.t = fips_204.internal_funcs.global_w.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
-        self.t1 = fips_204.internal_funcs.global_w_a.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
+        self.w = np.array(globals.w).reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
+        self.wa = globals.w_a.reshape(K_MATRIX * VECTOR_ARRAY_SIZE)
         
         self.angles = np.linspace(0, 2 * np.pi, 300)
         self.x_circle = np.cos(self.angles)
@@ -480,8 +481,8 @@ class RoundingRing(DisplayVar):
             angle = 2 * np.pi * (value / q)
             return np.cos(angle), np.sin(angle)
         
-        x_t, y_t = polar_to_cartesian(self.t[self.selected_index], Q_MODULUS)
-        x_t1, y_t1 = polar_to_cartesian(self.t1[self.selected_index], Q_MODULUS)
+        x_w, y_w = polar_to_cartesian(self.w[self.selected_index], Q_MODULUS)
+        x_wa, y_wa = polar_to_cartesian(self.wa[self.selected_index], Q_MODULUS)
 
         fig.update_layout(
             title='Rounding with High Bits Visualization',
@@ -491,8 +492,8 @@ class RoundingRing(DisplayVar):
             width=600,
             height=600
         )
-        fig.add_trace(go.Scatter(x=[x_t], y=[y_t], mode='markers', name='T (original)', marker=dict(size=10, color='red')))
-        fig.add_trace(go.Scatter(x=[x_t1], y=[y_t1], mode='markers', name='T1 * 2^D', marker=dict(size=10, color='blue')))
+        fig.add_trace(go.Scatter(x=[x_w], y=[y_w], mode='markers', name='W (original)', marker=dict(size=10, color='red')))
+        fig.add_trace(go.Scatter(x=[x_wa], y=[y_wa], mode='markers', name="W'approx", marker=dict(size=10, color='blue')))
         return fig
 
     def register_callbacks(self, app):
@@ -568,7 +569,7 @@ class XiDisplay(Display1DArray):
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
-            html.Div("First, we generate a random seed. We taje parts of 𝜉 to create seeds 𝜌 and 𝜌′.", 
+            html.Div("First, we generate a random seed. We take parts of 𝜉 to create seeds 𝜌 and 𝜌′.", 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
     
@@ -606,7 +607,7 @@ class S1Display(Display2DArray):
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
-            html.Div("""Where RejBoundedPoly samples a 256-order polynomial, with a coefficients in a limited range.
+            html.Div("""Where RejBoundedPoly samples a 256-order polynomial, with coefficients in a limited range.
                      S1 is a ℓx256 matrix. This represents a vector: the coefficients of basis vectors to produce
                      a point on the lattice. This is kept secret. 
                      """, 
@@ -628,7 +629,7 @@ class S2Display(Display2DArray):
             dcc.Markdown(f"${latex_str}$", mathjax=True),
             html.Div("""Where RejBoundedPoly samples a 256-order polynomial, with a coefficients in a limited range. 
                      S2 is a 𝑘x256 matrix. This represents a small amount of error that is added to a point on the public
-                     lattice.
+                     value T.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"}, id=self.latex_div)
@@ -658,25 +659,26 @@ class YDisplay(Display2DArray):
     def get_latex_representation(self):
         if None not in self.selected_index:
             i, _ = self.selected_index
-            latex_str = f"""\\rho'' = \\text{{hash}}(\\mu+\\text{{hash(msg)}})
-                y[{i}] = \\text{{bit_pack}}\\text{{hash}}(\\rho''+ {i} +\\kappa))"""
+            latex_str = f"\\rho'' = \\text{{hash}}(\\mu+\\text{{hash(msg)}})"
+            latex2_str = f"y[{i}] = \\text{{bit_unpack}}(\\text{{hash}}(\\rho''+ {i} +\\kappa, 256 * (1+bitlen(γ₁)))"
         else:
-            latex_str = """\\rho'' = \\text{{hash}}(\\mu+\\text{{hash(msg)}})
-                y[i] = \\text{{bit_pack}}(\\text{{hash}}(\\rho''+ i +\\kappa))"""
+            latex_str = "\\rho'' = \\text{{hash}}(\\mu+\\text{{hash(msg)}})"
+            latex2_str = "y[i] = \\text{{bit_unpack}}(\\text{{hash}}(\\rho''+ i +\\kappa, 256 * (1+bitlen(γ₁))))"
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
+            dcc.Markdown(f"${latex2_str}$", mathjax=True),
             html.Div("""Where μ represents a randomly generated number at the beginning of signing.
                      hash() takes data as an input, and deterministically produces an output that
-                     would be difficult to reverse. bit_pack() takes a hashed output, and extracts
-                     coefficients for a vector in a small range -η to η (-2 to 2). A property of 
-                     hash functions is that they produce a uniform spread-- thus with the restricted
-                     coefficient range, we can expect the output to be uniformly distributed. This yields
-                     a seemingly random vector, with a short point on the lattice. This fact is important in the verification process.
-                     
+                     would be difficult to reverse. A property of hash functions is that they produce 
+                     a uniform spread, centred around 0. This yields a seemingly random, yet short vector.
+
+                    Our final hash, of ρ'' with i and κ is hashed to a bitlength of 1 + γ₁'s bitlength 
+                     per polynomial entry; thus each coefficient is in the range of -γ₁+1, γ₁. 
+                     The values are extracted with bit_unpack().
                      Variable κ is used for rejection sampling.
 
-                     We then define W as the point on the lattice (A ∘ Y).
+                     We then define W as the point on the lattice made from Y: (A ∘ Y).
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
@@ -686,12 +688,13 @@ class CDisplay(Display1DArray):
         super().__init__(value, "c", "i")
 
     def get_latex_representation(self):
-        latex_str = "C = \\text{{SampleInBall}}(\\text{{hash(msg)}} + w)"
+        latex_str = "C = \\text{SampleInBall}(\\text{{hash(msg)}} + w)"
 
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
             html.Div("""Where SampleInBall produces a "mask"-- an array of coefficents with a fixed, small about of ones; the rest being 0.
+                     The mask is sourced deterministically from hashing the message.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
@@ -706,12 +709,16 @@ class ZDisplay(Display2DArray):
             dcc.Markdown(f"${latex_str}$", mathjax=True),
             html.Div("""Z represents a vector equal to Y, with some of S1 added to it. 
                      Importantly, S1 is not added to it as a point, but to its coefficients.
-                     We use rejection sampling to ensure Z's infinity norm is short. 
-                     This is because S1 biases the Y vector, and the larger Y is, the more
-                     pronounced S1 becomes over the noise. 
+                    Adding the S1 term turns the vector Z into a challenge; it allows the prover
+                     to show their knowledge of S1 to the verifier. And because C is sourced
+                     determistically from the message, it makes the process non-interactive. 
 
-
-                     We release C and Z as the signature, with Y kept secret.
+                     Importantly, we take an additional step and restart the process (with
+                     a increased value for κ) if Z is not a short vector. If Z is long, it
+                     removes its alignment with lattice-hardness problems (SVP), and
+                     would allow S1 to be reconstructed over many signatures. If Z is short, 
+                     the CS1 term would fall within the expected distribution of Y, and
+                     be hard to find.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"}, id=self.latex_div)
@@ -724,14 +731,17 @@ class WADisplay(Display2DArray):
         super().__init__(value, "W'", "𝑘,256")
 
     def get_latex_representation(self):
-        latex_str = """w =A \\cdot Y = A\\cdot(z-c\\cdot s1)
-            w' = a\\cdot z - c\\cdot t =a\\cdot z - (A\\cdot s1 + s2)
-            = a\\cdot(z-c\\cdot s1 +c \\cdot s2)
-            [[w' ~= w]]
-            """
+        latex_str = """w =A \\cdot Y = A\\cdot(z-c\\cdot s1)"""
+        latex2_str = "w' = A\\cdot z - c\\cdot t =A\\cdot z - c\\cdot(A\\cdot s1 + s2)"
+        latex3_str = "=A\\cdot(z-c\\cdot s1) +c \\cdot s2"
+        latex4_str = "c\\cdot s2\\simeq0 \\therefore w' \\simeq w"
+            
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
+            dcc.Markdown(f"${latex2_str}$", mathjax=True),
+            dcc.Markdown(f"${latex3_str}$", mathjax=True),
+            dcc.Markdown(f"${latex4_str}$", mathjax=True),
             html.Div("""We can define W' as another point on the lattice, with some error added to it.
                      Since W' is reconstructed using only public values, the signature will only be valid
                      if the signature constructed a valid Z. Finding a short vector Z that would satisfy

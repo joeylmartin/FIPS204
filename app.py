@@ -6,42 +6,20 @@ from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
-from fips_204.auxiliary_funcs import new_bitarray
-from fips_204.parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE
+
 from visualizers.display_vars import WADisplay, XiDisplay,ADisplay, S1Display, S2Display, TDisplay, YDisplay, RoundingRing, CDisplay, ZDisplay
 from visualizers.lattice import ALattice, WLattice, ProjectionMethods
 
 from visualizers.variablepage import VariablesList
-from fips_204.external_funcs import ml_dsa_key_gen, ml_dsa_sign, ml_dsa_verify
-from fips_204.internal_funcs import skDecode, expand_a
-import fips_204.internal_funcs as internal_funcs
+from fips_204.parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE
 # Initializ
-import os
+import app_calc_vals as globals
 
 from visualizers.vis_utils import center_mod_q
 
 app = Dash(prevent_initial_callbacks=True)
 app.config.suppress_callback_exceptions=True
 
-
-pk, sk = ml_dsa_key_gen()
-
-ctx_b = os.urandom(255)
-ctx = new_bitarray()
-ctx.frombytes(ctx_b)
-
-seed = random.getrandbits(256) #change to approved RBG
-s_b = seed.to_bytes(32, BYTEORDER)
-mb = new_bitarray()
-mb.frombytes(s_b)
-
-sig = ml_dsa_sign(sk, mb, ctx)
-ver = ml_dsa_verify(pk, mb, sig, ctx)
-print(ver)
-
-
-rho, k, tr, s1, s2, t0 = skDecode(sk)
-a = expand_a(rho)
 
 
 
@@ -54,41 +32,40 @@ def flatten_point(point: np.ndarray) -> np.ndarray:
     return center_mod_q(eg)
 
 def page1():
-    var1 = ADisplay( a[:,:,:20])
-    var2 = S1Display(s1[:,:30])
-    var3 = S2Display( s2[:,:30])
-    var4 = TDisplay(s2[:,:30])
+    var1 = ADisplay(globals.a[:,:,:20])
+    var2 = S1Display(globals.s1[:,:30])
+    var3 = S2Display(globals.s2[:,:30])
+    var4 = TDisplay(globals.s2[:,:30])
     return VariablesList(app, [var1, var2, var3, var4])
 
 def page2():
-    return ALattice(pk, sk,app)
+    return ALattice(app)
 
 def page3():
-    var0 = YDisplay(internal_funcs.global_w_a)
-    var1 = CDisplay(internal_funcs.global_c)
-    var2 = ZDisplay(internal_funcs.global_z)
+    var0 = YDisplay(globals.y)
+    var1 = CDisplay(globals.c)
+    var2 = ZDisplay(globals.z)
     return VariablesList(app, [var0, var1, var2])
 
 def page4():
-    return WLattice(pk, sk,app)
+    return WLattice(app)
 
 def page5():
-    var0 = WADisplay(internal_funcs.global_w_a)
+    var0 = WADisplay(globals.w_a)
     var1 = RoundingRing()
     return VariablesList(app, [var0, var1])
 
 def page6():
 
     extra_vals = {
-            "W": flatten_point(np.array(internal_funcs.global_w)),
-            "W' approx": flatten_point(np.array(internal_funcs.global_w_a)),
-            "Z": flatten_point(np.array(internal_funcs.global_z)),
+            "W": flatten_point(np.array(globals.w)),
+            "W' approx": flatten_point(np.array(globals.w_a)),
         }
-    return ALattice(pk, sk, app, extra_vars=extra_vals)
+    return ALattice( app, extra_vars=extra_vals)
 # Define the steps in the FIPS process
 
 pages = {
-    "Page 0" : VariablesList(app, [XiDisplay()]),
+    #"Page 0" : VariablesList(app, [XiDisplay()]),
     "Page 1" : page1(),
     "Page 2" : page2(),
     "Page 3" : page3(),
