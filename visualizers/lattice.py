@@ -1,7 +1,7 @@
 import fips_204.internal_funcs
 from fips_204.external_funcs import * #TODO: replace these im
 import bitarray
-from .vis_utils import sample_lattice_point, center_mod_q, DemoPage
+from .vis_utils import flatten_point, sample_lattice_point, center_mod_q, DemoPage
 from fips_204.parametres import *
 from enum import Enum
 from sklearn.manifold import MDS
@@ -48,7 +48,7 @@ class ALattice(DemoPage):
 
         self.vars["Lattice from A"] = lattice_points
         self.vars["Lattice with S2"] = lattice_with_s2
-        self.vars["T"] = self.flatten_point(globals.t)
+        self.vars["T"] = flatten_point(globals.t)
         #default; also way faster
         self.projection_method : ProjectionMethods = ProjectionMethods.VIEW_3D
 
@@ -106,12 +106,6 @@ class ALattice(DemoPage):
         #join dfs into one
         return pd.concat(dfs, ignore_index=True)
 
-    def flatten_point(self, point: np.ndarray) -> np.ndarray:
-        '''
-        Flatten point into Kx256-dimension space and modulo to q/2 space
-        '''
-        eg = point.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
-        return center_mod_q(eg)
     
     def set_step_index(self, value):
         """
@@ -199,8 +193,8 @@ class WLattice(ALattice):
         '''
 
         globals.update_on_message(message)
-        self.w = super().flatten_point(np.array(globals.w))
-        self.w_a = super().flatten_point(np.array(globals.w_a))
+        self.w = flatten_point(np.array(globals.w))
+        self.w_a = flatten_point(np.array(globals.w_a))
 
     def sign_message_and_gen_lattice(self, message: bitarray):
         """

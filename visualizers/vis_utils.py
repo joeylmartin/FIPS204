@@ -29,6 +29,13 @@ def center_mod_q(vec):
     """
     return np.where(vec > Q_MODULUS // 2, vec - Q_MODULUS, vec)
 
+def flatten_point(point: np.ndarray) -> np.ndarray:
+    '''
+    Flatten point into Kx256-dimension space and modulo to q/2 space
+    '''
+    eg = point.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
+    return center_mod_q(eg)
+
 def sample_lattice_point(A: np.ndarray, S2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     Given Matrix A (representing basis vectors for a lattice), and error S2(K_MATRIX x 256), generate points on Lattice A,

@@ -15,28 +15,24 @@ from fips_204.parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE
 
 import app_calc_vals as globals
 
-from visualizers.vis_utils import center_mod_q
+from visualizers.vis_utils import center_mod_q, flatten_point
 
 app = Dash(prevent_initial_callbacks=True)
 app.config.suppress_callback_exceptions=True
 
 
+#cut off for array width, to prevent slowdown on site
+VECTOR_DISPLAY_WIDTH = 127
 
 
 
-def flatten_point(point: np.ndarray) -> np.ndarray:
-    '''
-    Flatten point into Kx256-dimension space and modulo to q/2 space
-    '''
-    eg = point.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
-    return center_mod_q(eg)
 
 def page1():
     var0 = XiDisplay()
-    var1 = ADisplay(globals.a[:,:,:20])
-    var2 = S1Display(globals.s1[:,:30])
-    var3 = S2Display(globals.s2[:,:30])
-    var4 = TDisplay(globals.t[:,:30])
+    var1 = ADisplay(globals.a[:,:,:VECTOR_DISPLAY_WIDTH])
+    var2 = S1Display(globals.s1[:,:VECTOR_DISPLAY_WIDTH])
+    var3 = S2Display(globals.s2[:,:VECTOR_DISPLAY_WIDTH])
+    var4 = TDisplay(globals.t[:,:VECTOR_DISPLAY_WIDTH])
     return VariablesList(app, [var0, var1, var2, var3, var4])
 
 def page2():

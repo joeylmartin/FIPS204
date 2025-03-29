@@ -693,13 +693,13 @@ class CDisplay(Display1DArray):
         super().__init__(value, "c", "i")
 
     def get_latex_representation(self):
-        latex_str = "C = \\text{SampleInBall}(\\text{{hash(msg)}} + w)"
+        latex_str = "C = \\text{SampleInBall}(\\text{hash(msg)} + \\text{HighBits}(w))"
 
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
             html.Div("""Where SampleInBall produces a "mask"-- an array of coefficents with a fixed, small about of ones; the rest being 0.
-                     The mask is sourced deterministically from hashing the message.
+                     The mask is sourced deterministically from hashing the message. W is rounded with HighBits, to make verification valid later.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
@@ -724,6 +724,8 @@ class ZDisplay(Display2DArray):
                      would allow S1 to be reconstructed over many signatures. If Z is short, 
                      the CS1 term would fall within the expected distribution of Y, and
                      be hard to find.
+
+                     As our signature, we release Z, C and the message.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"}, id=self.latex_div)
@@ -740,18 +742,27 @@ class WADisplay(Display2DArray):
         latex2_str = "w' = A\\cdot z - c\\cdot t =A\\cdot z - c\\cdot(A\\cdot s1 + s2)"
         latex3_str = "=A\\cdot(z-c\\cdot s1) +c \\cdot s2"
         latex4_str = "c\\cdot s2\\simeq0 \\therefore w' \\simeq w"
-            
+        latex5_str = "\\therefore \\text{HighBits}(w') = \\text{HighBits}(w)"
+        latex6_str = "\\therefore c =\\text{SampleInBall}(\\text{hash(msg)} + \\text{HighBits}(w'))"
 
         return html.Div([
             dcc.Markdown(f"${latex_str}$", mathjax=True),
             dcc.Markdown(f"${latex2_str}$", mathjax=True),
             dcc.Markdown(f"${latex3_str}$", mathjax=True),
             dcc.Markdown(f"${latex4_str}$", mathjax=True),
-            html.Div("""We can define W' as another point on the lattice, with some error added to it.
-                     Since W' is reconstructed using only public values, the signature will only be valid
-                     if the signature constructed a valid Z. Finding a short vector Z that would satisfy
-                     the above equation is reducible to the Short-Integer-Solution (SIS) problem, 
-                     which is provably hard against current quantum algorithms.
+            dcc.Markdown(f"${latex5_str}$", mathjax=True),
+            dcc.Markdown(f"${latex6_str}$", mathjax=True),
+            html.Div("""We can define W' as another point on the lattice. It is a reconstruction
+                     of W, using only public key values and the signature vector. As seen above, 
+                     we can get a very close approximation(only a small error is added), without
+                     exposing any of the secret values. 
+                     
+                     Finding a short vector Z that would satisfy the approximation equations above is 
+                     computationally equivalnet to the Short-Integer-Solution (SIS) problem, and
+                     is understood as hard against quantum computing.
+                     
+                     We validate that W' would be close to W by computing the commitment mask. If C' and C are equal,
+                     then W' and W must be approximately equal, therefore the signature is valid.
                      """, 
                      style={"fontSize": "0.9rem", "marginTop": "0.5rem"})
         ], style={"marginTop": "1rem", "fontSize": "1.1rem"},id=self.latex_div)
