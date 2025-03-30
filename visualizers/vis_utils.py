@@ -1,5 +1,5 @@
 
-from fips_204.parametres import Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE, N_PRIVATE_KEY_RANGE
+from fips_204.parametres import L_MATRIX, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE, N_PRIVATE_KEY_RANGE
 import numpy as np
 import itertools
 from typing import Tuple
@@ -25,13 +25,14 @@ class DemoPage(ABC):
 
 def center_mod_q(vec):
     """
-    Centers a vector in the range (-Q/2, Q/2) instead of (0, Q).
+    Centers a np array in the range (-Q/2, Q/2) instead of (0, Q).
     """
+    #use np.where to vectorize the operation, faster
     return np.where(vec > Q_MODULUS // 2, vec - Q_MODULUS, vec)
 
 def flatten_point(point: np.ndarray) -> np.ndarray:
     '''
-    Flatten point into Kx256-dimension space and modulo to q/2 space
+    Flatten point (Rq) into Kx256-dimension space and modulo to q/2 space
     '''
     eg = point.reshape(1, K_MATRIX * VECTOR_ARRAY_SIZE)
     return center_mod_q(eg)
@@ -44,7 +45,7 @@ def sample_lattice_point(A: np.ndarray, S2: np.ndarray) -> Tuple[np.ndarray, np.
     Number of lattice points generated is (2 * N_PRIVATE_KEY_RANGE + 1) ^ K_MATRIX.
     """
     coefficient_values = list(range(-N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE + 1))
-    coefficients = np.array(list(itertools.product(coefficient_values, repeat=K_MATRIX)))  # Num_combos Exhaustive combinations
+    coefficients = np.array(list(itertools.product(coefficient_values, repeat=L_MATRIX)))  # Num_combos Exhaustive combinations
 
     # Generate lattice points as integer combinations of basis vectors
     lattice_points = np.einsum('klm,nl->nkm', A, coefficients) % Q_MODULUS

@@ -75,7 +75,7 @@ def pkEncode(rho : bitarray, t1 : np.ndarray) -> bitarray:
     Where T1 is K polynomials (k x 256 np array)
     '''
     pk = rho.copy()
-    bit_len = int(math.pow(2, ((Q_MODULUS - 1).bit_length() - D_DROPPED_BITS)) - 1)
+    bit_len = (1 << ((Q_MODULUS - 1).bit_length() - D_DROPPED_BITS)) - 1
 
     for i in range(K_MATRIX):
         pk += simple_bit_pack(t1[i], bit_len)
@@ -201,7 +201,7 @@ def w1_encode(w1: np.ndarray) -> bitarray:
     Encodes a polynomial w1 into a bit string.
     '''
     w_hat = new_bitarray()
-    bit_pack_bound= int((Q_MODULUS - 1)/(2 * GAMMA_2_LOW_ORDER_ROUND) - 1)
+    bit_pack_bound= int(((Q_MODULUS - 1)/(2 * GAMMA_2_LOW_ORDER_ROUND)) - 1)
     for i in range(K_MATRIX):
         w_hat += simple_bit_pack(w1[i], bit_pack_bound)
     return w_hat
@@ -227,7 +227,7 @@ def sample_in_ball(rho: bitarray) -> np.ndarray:
 
         c[i] = c[j]
         temp = h[i+TAU_ONES - 256]
-        temp2 = math.pow(-1,temp)
+        temp2 = int(math.pow(-1,temp))
         c[j] = temp2
 
     return c
@@ -344,7 +344,7 @@ def ml_dsa_key_gen_internal(seed: bytes) -> Tuple[bitarray, bitarray]:
 
     #product of A and NTT of S1
     ntt_product = matrix_vector_ntt(a, [NTT(x) for x in s1])
-    t = [NTT_inv(x) for x in ntt_product] +  s2
+    t = ([NTT_inv(x) for x in ntt_product] + s2) % Q_MODULUS
 
 
     t0 = np.ndarray((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
@@ -405,10 +405,10 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> bitarray:
         cs1_prod = scalar_vector_ntt(c_hat, s1_hat) 
         cs1 = np.array([NTT_inv(sub) for sub in cs1_prod])
     
-        cs2_prod = scalar_vector_ntt(c_hat, s2_hat)
+        cs2_prod = (c_hat * s2_hat) % Q_MODULUS
         cs2 = np.array([NTT_inv(sub) for sub in cs2_prod])
 
-        z = y + cs1
+        z = (y + cs1) % Q_MODULUS
         
         r0 = np.empty((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
         for i in range(K_MATRIX):
@@ -420,7 +420,7 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> bitarray:
         if (z_inf >= (GAMMA_1_COEFFICIENT - BETA)) or (r0_inf >= (GAMMA_2_LOW_ORDER_ROUND - BETA)): 
             z, h = None, None
         else:
-            ct0_prod = scalar_vector_ntt(c_hat, t0_hat)
+            ct0_prod = (c_hat * t0_hat) % Q_MODULUS
             ct0 = np.array([NTT_inv(sub) for sub in ct0_prod])
             
             h = np.zeros((K_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
@@ -435,12 +435,7 @@ def ml_dsa_sign_internal(sk: bitarray, m: bitarray, rnd: bitarray) -> bitarray:
 
         kappa += L_MATRIX
 
-    #potential to np vectorize this for better performance?
-    z_mod = np.zeros((L_MATRIX, VECTOR_ARRAY_SIZE), dtype='int64')
-    for i in range(L_MATRIX):
-        for j in range(VECTOR_ARRAY_SIZE):
-            z_mod[i][j] = mod_pm(z[i][j], Q_MODULUS)
-
+    z_mod = mod_pm_vector(z, Q_MODULUS)
     sig = sigEncode(c_hash, z_mod, h)
     return sig
 
@@ -458,11 +453,11 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
     mu = h_shake256((tr + m).tobytes(), 64 * 8)
     c = sample_in_ball(c_hash)
     
-    d_p2 = math.pow(2, D_DROPPED_BITS)
+    d_p2 = 1 << D_DROPPED_BITS
 
     w_a1 = matrix_vector_ntt(a, [NTT(x) for x in z])
-    w_a2 = scalar_vector_ntt(NTT(c), [NTT(d_p2 * x) for x in t1])
-    w_temp_prod = add_vector_ntt(w_a1, -w_a2)
+    w_a2 = (NTT(c) * [NTT(d_p2 * x) for x in t1]) % Q_MODULUS
+    w_temp_prod = (w_a1 - w_a2) % Q_MODULUS
 
     w_a = np.array([NTT_inv(x) for x in w_temp_prod])
 
@@ -473,4 +468,7 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
 
     c_hash_prime = h_shake256((mu + w1_encode(w1_prime)).tobytes(), 2 * LAMBDA_COLLISION_STR)
 
+    temp_b = (c_hash == c_hash_prime)
+    if not temp_b:
+        return False
     return (get_vector_infinity_norm(z) < (GAMMA_1_COEFFICIENT - BETA)) and (c_hash == c_hash_prime)

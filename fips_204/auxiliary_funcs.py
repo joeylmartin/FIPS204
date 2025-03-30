@@ -43,16 +43,6 @@ def integer_to_bits(x: int, a: int) -> bitarray:
         y.append(x_h % 2)
         x_h = x_h // 2
     return new_bitarray(y)
-    '''
-    y = (x >> np.arange(a)) & 1
-    
-    # Initialize a bitarray and extend it with the computed bits
-    bits = new_bitarray()
-    bits.extend(y.astype(bool))  # Convert y to bool array, as bitarray works well with bools
-    
-    return bits'''
-
-    #return int2ba(x[:a], endian="little")
 
 def integer_to_bytes(x: int, a: int) -> bytes:
     '''
@@ -74,17 +64,13 @@ bit_arr_to_int = lambda bit_array : ba2int(bit_array)
 def bits_to_integer(y: bitarray, a: int) -> int:
     '''
     Computes the integer represented by the base-2 representation y mod 2a.
+    
     '''
     x = 0
     for i in range(1, a + 1):
         x = (2 * x) + y[a - i]
     return x
-    '''
-    if len(y) == 0:
-        return 0
-        
-    return ba2int(y)
-    '''
+
 
 def coeff_from_three_bytes(b0: int, b1: int, b2: int) -> int:
     b2_p = b2
@@ -109,17 +95,13 @@ def coeff_from_half_byte(b: int) -> int:
 
     return None
 
-def mod_pm(x, q):
+def mod_pm(x: int, q: int) -> int:
     '''
     Computes x +-mod q, under symmetric modular arithmetic,
     where -(Q/2) < x < (Q/2).
     '''
     r = x % q
-    if r > q // 2:
-        r -= q
-    elif r < -(q // 2):
-        r += q
-    return r
+    return r - q if r > ( q // 2 )else r
 
 def mod_pm_vector(x: np.ndarray, q: int) -> np.ndarray:
     '''
@@ -137,7 +119,7 @@ def power_2_round(r: int) -> Tuple[int, int]:
     Decomposes r into (r1, r0) such that r ≡ r1 2^d + r0 mod q.
     '''
     r_pos = r % Q_MODULUS
-    two_d = math.pow(2, D_DROPPED_BITS)
+    two_d = 1 << D_DROPPED_BITS
     r0 = mod_pm(r_pos, two_d)
     return (r_pos - r0) // two_d, r0
 
@@ -145,10 +127,10 @@ def decompose(r: int) -> Tuple[int, int]:
     '''
     Decomposes r into (r1, r0) such that r ≡ r1(2*Gamma2) + r0 mod q.
     '''
-    r_pos = r % Q_MODULUS
+    r_pos = int(r % Q_MODULUS)
     r0 = mod_pm(r_pos, 2 * GAMMA_2_LOW_ORDER_ROUND)
 
-    if r_pos - r0 + 1 == Q_MODULUS:
+    if r_pos - r0 == Q_MODULUS - 1:
         r1 = 0
         r0 -= 1
     else:
@@ -181,7 +163,7 @@ def use_hint(h: bool, r: int) -> int:
     '''
     Returns the high bits of 𝑟 adjusted according to hint ℎ.
     '''
-    m = (Q_MODULUS - 1)/(2 * GAMMA_2_LOW_ORDER_ROUND)
+    m = (Q_MODULUS - 1)//(2 * GAMMA_2_LOW_ORDER_ROUND)
     r1, r0 = decompose(r)
 
     if h and r0 > 0:
@@ -199,7 +181,7 @@ def simple_bit_pack(w: np.ndarray, b: int) -> bitarray:
     '''
     Encodes polynomial w into a bit string, such that the 
     coefficients of w are all in [0, b]
-    ''' #BLAH FIX INT CASTING
+    ''' 
     z = new_bitarray()
     for i in range(VECTOR_ARRAY_SIZE):
         z += integer_to_bits(w[i], b.bit_length())
@@ -232,7 +214,7 @@ def bit_unpack(v: bitarray, a: int, b: int) -> np.ndarray:
     Decodes a bit string v into a polynomial, such that the 
     coefficients of the polynomial are in [-a, b]
     '''
-    c = (a + b).bit_length()
+    c = (a + b).bit_length() 
     w = np.empty(VECTOR_ARRAY_SIZE, dtype='int64')
     for i in range(VECTOR_ARRAY_SIZE):
         w[i] = b - bits_to_integer(v[i * c : (i * c) + c], c)
@@ -286,7 +268,7 @@ def montgomery_reduce(a: int) -> int:
     '''
     Computes a * (2^-32) % q. Where should I use this for optimization??
     '''
-    two32 = math.pow(2,32)
+    two32 = 1 << 32
     QINV = 58728449 #inverse of q mod 2^32
     t = ((a % two32) * QINV) % two32
     r = (a - t * Q_MODULUS) // two32
@@ -298,4 +280,4 @@ def get_vector_infinity_norm(vector: np.ndarray) -> int:
     (-Q_MODULUS/2 < inf_norm < Q_MODULUS/2) 
     '''
     modded_vector = mod_pm_vector(vector, Q_MODULUS)
-    return np.max(modded_vector)
+    return np.max(np.abs(modded_vector)) 
