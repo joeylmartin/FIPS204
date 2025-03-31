@@ -468,7 +468,4 @@ def ml_dsa_verify_internal(pk: bitarray, m: bitarray, sigma: bitarray) -> bool:
 
     c_hash_prime = h_shake256((mu + w1_encode(w1_prime)).tobytes(), 2 * LAMBDA_COLLISION_STR)
 
-    temp_b = (c_hash == c_hash_prime)
-    if not temp_b:
-        return False
     return (get_vector_infinity_norm(z) < (GAMMA_1_COEFFICIENT - BETA)) and (c_hash == c_hash_prime)

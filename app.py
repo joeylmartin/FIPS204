@@ -146,7 +146,6 @@ def navigate_steps(prev_clicks, next_clicks):
     Input('register-trigger', 'data')
 )
 def register_page_callbacks(data):
-    print("Registering callbacks")
     """ Registers callbacks only after page content is updated """
     page.register_callbacks(app)
 

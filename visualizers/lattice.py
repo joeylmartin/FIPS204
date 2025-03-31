@@ -29,8 +29,6 @@ class ProjectionMethods(Enum):
     VIEW_3D = 1
     MDS = 2
 
-temp = ProjectionMethods.VIEW_3D
-
 class ALattice(DemoPage):
     def __str__(self):
         return "A, S1, S2 Lattice Visualization"
@@ -280,7 +278,6 @@ class WLattice(ALattice):
             prevent_initial_call=True 
         )
         def update_plot(value, lattice_ready):
-            print("feefef")
             """ Updates lattice """
             if lattice_ready and lattice_ready.get('ready'):
                 self.set_step_index(value)

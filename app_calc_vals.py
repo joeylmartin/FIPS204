@@ -4,7 +4,7 @@ from fips_204.internal_funcs import NTT, NTT_inv, pkDecode, sample_in_ball, sigD
 import fips_204.internal_funcs as internal_funcs
 from fips_204.auxiliary_funcs import new_bitarray, use_hint
 from fips_204.ntt_arithmetic import add_vector_ntt, matrix_vector_ntt, scalar_vector_ntt
-from fips_204.parametres import BYTEORDER, D_DROPPED_BITS, K_MATRIX, VECTOR_ARRAY_SIZE
+from fips_204.parametres import BYTEORDER, D_DROPPED_BITS, K_MATRIX, Q_MODULUS, VECTOR_ARRAY_SIZE
 import os
 import numpy as np
 import random
@@ -42,7 +42,7 @@ def update_on_message(message):
     cs1_prod = scalar_vector_ntt(c_hat, s1_hat) 
     cs1 = np.array([NTT_inv(sub) for sub in cs1_prod])
         
-    y = z - cs1
+    y = (z - cs1) % Q_MODULUS
     w_temp_prod = matrix_vector_ntt(a, [NTT(x) for x in y])
     w = [NTT_inv(x) for x in w_temp_prod]
 
@@ -50,11 +50,11 @@ def update_on_message(message):
     t = [NTT_inv(x) for x in ntt_product] + s2
     
     s2_hat = [ NTT(s) for s in s2]
-    cs2_prod = scalar_vector_ntt(c_hat, s2_hat)
+    cs2_prod = (c_hat * s2_hat) % Q_MODULUS
     cs2 = np.array([NTT_inv(sub) for sub in cs2_prod])
 
     #Get W1' (without hint or T rounding just by subbing cs2)
-    w_a = w - cs2
+    w_a = (w - cs2) % Q_MODULUS
 
 update_on_message(mb)
 

@@ -95,7 +95,6 @@ class Display2DArray(DisplayVar):
         return self.store_id
     
     def is_valid_index_update(self, change):
-        print(f"Selected index: {self.selected_index}")
         if change == 1:
             if self.selected_index[1] + 1 >= self.cols:
                 if self.selected_index[0] + 1 >= self.rows:
