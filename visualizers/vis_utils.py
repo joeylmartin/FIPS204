@@ -42,7 +42,7 @@ def sample_lattice_point(A: np.ndarray, S2: np.ndarray) -> Tuple[np.ndarray, np.
     Given Matrix A (representing basis vectors for a lattice), and error S2(K_MATRIX x 256), generate points on Lattice A,
     created by all basis combinations with coefficients in the range (-N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE).
     Returns lattice points, and points with S2 applied. Both are centered modulo Q. Returns flattened versions of these points(K_MATRIX x 256).
-    Number of lattice points generated is (2 * N_PRIVATE_KEY_RANGE + 1) ^ K_MATRIX.
+    Number of lattice points generated is (2 * N_PRIVATE_KEY_RANGE + 1) ^ L_MATRIX.
     """
     coefficient_values = list(range(-N_PRIVATE_KEY_RANGE, N_PRIVATE_KEY_RANGE + 1))
     coefficients = np.array(list(itertools.product(coefficient_values, repeat=L_MATRIX)))  # Num_combos Exhaustive combinations
