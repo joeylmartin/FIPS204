@@ -1,19 +1,19 @@
-import random
-import hashlib
 import math
 import pickle
-from typing import Tuple, Any
+from typing import Tuple
 import numpy as np
 from bitarray import bitarray, _set_default_endian
 from .parametres import *
 from .ntt_arithmetic import *
 from .auxiliary_funcs import *
-from .hash_funcs import h_shake256, h_shake128, h_init, hash_absorb, hash_squeeze, g_init
+from .hash_funcs import h_shake256, h_init, hash_absorb, hash_squeeze, g_init
 
-#byteorder is little endian
 _set_default_endian(BYTEORDER)
 
 def load_zeta_brv_cache(cache_file='zeta_utils/zeta_brv_k_cache.pkl'):
+    '''
+    Load precomputed values of zeta from a cache file.
+    '''
     with open(cache_file, 'rb') as file:
         zeta_brv = pickle.load(file)
     return zeta_brv

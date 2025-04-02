@@ -1,6 +1,5 @@
 import numpy as np
-from .parametres import *
-
+from .parametres import L_MATRIX, Q_MODULUS, K_MATRIX, VECTOR_ARRAY_SIZE
 
 def add_ntt(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     '''

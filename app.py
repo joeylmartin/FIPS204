@@ -6,26 +6,22 @@ from dash import dcc
 import plotly.graph_objs as go
 import dash_mantine_components as dmc
 import numpy as np
-
 from visualizers.display_vars import WADisplay, XiDisplay,ADisplay, S1Display, S2Display, TDisplay, YDisplay, RoundingRing, CDisplay, ZDisplay
 from visualizers.lattice import ALattice, WLattice, ProjectionMethods
-
 from visualizers.variablepage import VariablesList
 from fips_204.parametres import BYTEORDER, K_MATRIX, VECTOR_ARRAY_SIZE
-
 import app_calc_vals as globals
+from visualizers.vis_utils import  flatten_point
 
-from visualizers.vis_utils import center_mod_q, flatten_point
-
+#initialize Dash app object
 app = Dash(prevent_initial_callbacks=True)
 app.config.suppress_callback_exceptions=True
 
 
+#Instantiate pages for app:
+
 #cut off for array width, to prevent slowdown on site
 VECTOR_DISPLAY_WIDTH = 127
-
-
-
 
 def page1():
     var0 = XiDisplay()
@@ -53,13 +49,11 @@ def page5():
     return VariablesList(app, [var0, var1])
 
 def page6():
-
     extra_vals = {
             "W": flatten_point(np.array(globals.w)),
             "W' approx": flatten_point(np.array(globals.w_a)),
         }
     return ALattice( app, extra_vars=extra_vals)
-# Define the steps in the FIPS process
 
 pages = {
     "Page 1" : page1(),
@@ -69,7 +63,7 @@ pages = {
     "Page 5" : page5(),
     "Page 6" : page6()
 }
-page_names = list(pages.keys()) #TODO: check ordering
+page_names = list(pages.keys())
 current_step_index = 0  # Default starting index
 page = pages[page_names[current_step_index]]
 

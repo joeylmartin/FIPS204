@@ -1,8 +1,6 @@
 import pickle
+from fips_204.parametres import Q_MODULUS
 
-
-
-q = 8380417
 zeta = 1753
 
 # Function to compute bit-reversal of k
@@ -19,7 +17,7 @@ def bit_reverse(k, bit_width=8):
 def compute_zeta_brv_k(k):
     brv_k = bit_reverse(k)
     # Compute zeta^(brv(k)) mod q
-    zeta_brv_k = pow(zeta, brv_k, q)
+    zeta_brv_k = pow(zeta, brv_k, Q_MODULUS)
     return zeta_brv_k
 
 # Precompute and store the values
@@ -30,7 +28,7 @@ for k in range(1, 256):
     zeta_brv_k = compute_zeta_brv_k(k)
     precomputed_values.append(zeta_brv_k)
 
-# Optional: Save the values to a text file
+# Save the values to a pkl file
 with open('zeta_brv_k_cache.pkl', 'wb') as file:
     pickle.dump(precomputed_values, file)
 

@@ -10,13 +10,17 @@ import numpy as np
 import random
 
 
+#This file is responsible for calculating
+#values used for application. It is not a part of the FIPS-204 standard.
+
 pk, sk = ml_dsa_key_gen()
 
 ctx_b = os.urandom(255)
 ctx = new_bitarray()
 ctx.frombytes(ctx_b)
 
-seed = random.getrandbits(256) #change to approved RBG
+#Random default message
+seed = random.getrandbits(256)
 s_b = seed.to_bytes(32, BYTEORDER)
 mb = new_bitarray()
 mb.frombytes(s_b)
@@ -24,6 +28,10 @@ mb.frombytes(s_b)
 rho, t1 = pkDecode(pk)
 
 def update_on_message(message):
+    '''
+    Given a new update, calculate new globals values for
+    y, c, z, w1_prime, w, w_a, t
+    '''
     global a, s1, s2, y, c, z, w1_prime, w, w_a, a_rq, t
     sig = ml_dsa_sign(sk, message, ctx) 
     ver = ml_dsa_verify(pk, mb, sig, ctx)

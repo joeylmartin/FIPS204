@@ -1,7 +1,8 @@
 import math
 from enum import Enum
 
-BYTEORDER='little' #CHECK IF ENDIANNESS MESSES STUFF UP!!
+#ML-DSA uses little endian
+BYTEORDER='little'
 
 #PARAMETRES e.g
 class Strength(Enum):
@@ -50,6 +51,4 @@ match STRENGTH:
         W_MAX_HINT_ONES = 75
     #case _:
 
-#each vector consists of 256 components
-#and so do polynomials. maybe change?
 VECTOR_ARRAY_SIZE = 256 

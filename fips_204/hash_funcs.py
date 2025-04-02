@@ -29,22 +29,10 @@ def hash_absorb(ctx : HASH, data : bitarray) -> HASH:
     ctx.update(bytes(data))
     return ctx
 
-
-
 def hash_squeeze(ctx : HASH, bit_length : int) -> tuple[HASH, bitarray]:
     '''
     Extracts bit_length output bits produced during the squeezing phase of XOF
     and updates context ctx
-    '''
-
-    '''
-    #Squeeze only works in bytes! Hash ceiling to nearest byte, then return the bits
-    byte_length = ceil(bit_length / 8)
-    byte_output = ctx.digest(byte_length)
-    bits = new_bitarray()
-    bits.frombytes(byte_output) #creates a bitarray from the byte_output
-
-    return ctx, bits[0:bit_length] #return sliced bit array
     '''
     byte_length = bit_length // 8
     byte_output = ctx.read(byte_length)
@@ -52,8 +40,6 @@ def hash_squeeze(ctx : HASH, bit_length : int) -> tuple[HASH, bitarray]:
     bits.frombytes(byte_output) #creates a bitarray from the byte_output
 
     return ctx, bits 
-
-
 
 #Note: SHAKE-256 and SHAKE-128 are written using bit_length, but in 
 #the original implementation, they use byte_length.
